@@ -1,0 +1,57 @@
+{# Harvest jobs +720 email template #}
+
+
+<html>
+<head>
+    <style>
+
+        footer div p {
+            font-family: 'Calibri';
+            font-size: 11px;
+        }
+        .mensaje p {margin: 0;}
+        .mensaje .ml10 {margin-left: 10px;}
+        .mensaje .mb10 {margin-bottom: 10px;}
+        .mensaje .mt10 {margin-top: 10px;}
+    </style>
+</head>
+<body>
+  <div class="mensaje">
+    <p class="mb10">Estimado/a.</p>
+    <p class="mb10">Este es el detalle de las federaciones en estado 'Running' iniciadas hace más de 720 minutos:"</p>
+    {%- for harvest_job in harvest_job_list -%}
+      <p class="ml10">Nº {{loop.index}}</p>
+      <p class="ml10">Job: {{harvest_job['job_id']}}</p>
+      <p class="ml10">Created: {{h.render_datetime(harvest_job['created'], with_hours=True)}}</p>
+      <p class="ml10">Gather started: {{h.render_datetime(harvest_job['gather_started'], with_hours=True)}}</p>
+      <p class="ml10">Gather finished: {{h.render_datetime(harvest_job['gather_finished'], with_hours=True)}}</p>
+      <p class="ml10">Finished: {{h.render_datetime(harvest_job['finished'], with_hours=True)}}</p>
+      <p class="ml10">****************</p>
+    {%- endfor -%}
+    <p class="mt10 mb10">Un saludo.</p>
+  </div>
+    <footer>
+        <p style="margin-top:0;margin-bottom:0;"><em>Iniciativa Aporta - </em> <a href="https://datos.gob.es/es/"><em>datos.gob.es</em></a></p>
+        <p style="margin-top:0;margin-bottom:0;"><em>Entidad pública </em><a href="https://www.red.es/es"><em>Red.es</em></a></p>
+        <p style="margin-top:0;margin-bottom:0;"><em>Ministerio para la Transformación Digital y de la Función Pública</em></p>
+        <table style="font-family:arial,sans-serif;width:100%;height:100px;border-collapse:collapse;border-style:none;float:left;">
+          <tbody>
+            <tr style="border-style:none;">
+              <td style="text-align:left;height:50px;padding:8px;border:1px none #DDDDDD;">
+                <div data-entity-type="media"><img alt="logos" height="55" src="{{url_logos}}" data-imagetype="External">
+                </div>
+              </td>
+            </tr>
+            <tr style="border-style:none;">
+              <td style="text-align:left;height:35px;padding:8px;border:1px none #DDDDDD;">
+                <a href="{{url_subscribe}}">
+                  <div data-entity-type="media"><img alt="suscripción" height="45" src="{{url_image_subscribe}}" data-imagetype="External">
+                  </div>
+                </a>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+    </footer>
+</body>
+</html>

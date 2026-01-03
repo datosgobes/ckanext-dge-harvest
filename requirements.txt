@@ -1,5 +1,8 @@
-isodate==0.5.4
+isodate==0.6.0
 iso8601==0.1.11
 losser==0.0.3
 httpretty
 rfc3987
+pyshacl==0.27.0 #pyshacl requires rdflib >=6.3.2 and < 8.0
+SPARQLWrapper==2.0.0
+treelib==1.7.0

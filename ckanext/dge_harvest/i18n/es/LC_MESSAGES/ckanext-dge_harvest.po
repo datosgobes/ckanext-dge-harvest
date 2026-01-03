@@ -1,0 +1,601 @@
+# Spanish translations for ckanext-dge-harvest.
+# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+#
+# This file is part of "dge-harvest (datos.gob.es)".
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: ckanext-harvest 0.2\n"
+"Report-Msgid-Bugs-To: EMAIL@ADDRESS\n"
+"POT-Creation-Date: 2015-12-11 15:21+0000\n"
+"PO-Revision-Date: 2016-09-14 07:49+0200\n"
+"Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
+"Language-Team: es <LL@li.org>\n"
+"Plural-Forms: nplurals=2; plural=(n != 1)\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Generated-By: Babel 0.9.6\n"
+
+#: ckanext/harvest/helpers.py:70
+msgid "title"
+msgstr "título"
+
+#: ckanext/harvest/controllers/organization.py:40
+msgid "Group not found"
+msgstr "Grupo no autorizado"
+
+#: ckanext/harvest/controllers/organization.py:42
+#, python-format
+msgid "Unauthorized to read group %s"
+msgstr "No autorizado para leer grupo %s"
+
+#: ckanext/harvest/controllers/organization.py:137
+msgid "Groups"
+msgstr "Grupos"
+
+#: ckanext/harvest/controllers/organization.py:138
+msgid "Tags"
+msgstr "Etiquetas"
+
+#: ckanext/harvest/controllers/organization.py:139
+msgid "Formats"
+msgstr "Formatos"
+
+#: ckanext/harvest/controllers/organization.py:140
+msgid "Licence"
+msgstr "Licencia"
+
+#: ckanext/harvest/controllers/view.py:28
+msgid "Not authorized to see this page"
+msgstr "No autorizado para ver esta página"
+
+#: ckanext/harvest/controllers/view.py:45
+msgid "Harvesting source successfully cleared"
+msgstr "La fuente de la federación se borró con éxito"
+
+#: ckanext/harvest/controllers/view.py:47
+msgid "Harvesting source successfully deactivated"
+msgstr "La fuente de la federación se desactivó con éxito"
+
+#: ckanext/harvest/controllers/view.py:51
+#: ckanext/harvest/controllers/view.py:63
+#: ckanext/harvest/controllers/view.py:85
+#: ckanext/harvest/controllers/view.py:146
+#: ckanext/harvest/controllers/view.py:184
+#: ckanext/harvest/controllers/view.py:195
+#: ckanext/harvest/controllers/view.py:221
+#: ckanext/harvest/logic/auth/create.py:34
+#: ckanext/harvest/logic/auth/delete.py:18 ckanext/harvest/logic/auth/get.py:33
+#: ckanext/harvest/logic/auth/update.py:19
+msgid "Harvest source not found"
+msgstr "No se ha encontrado la fuente de la federación"
+
+#: ckanext/harvest/controllers/view.py:61
+msgid "Harvest will start shortly. Refresh this page for updates."
+msgstr "La federación se iniciará en breve. Volver a cargar esta página para actualizaciones."
+
+#: ckanext/harvest/controllers/view.py:67
+msgid ""
+"Cannot create new harvest jobs on inactive sources. First, please change "
+"the source status to 'active'."
+msgstr ""
+"No se pueden crear nuevas tareas de federación en fuentes inactivas. Primero, cambie el estado de la fuente a «activo»."
+
+#: ckanext/harvest/controllers/view.py:71
+msgid "A harvest job has already been scheduled for this source"
+msgstr "Una tarea de federación ya ha sido programada para esta fuente"
+
+#: ckanext/harvest/controllers/view.py:83
+msgid "Harvest source cleared"
+msgstr "Fuente de federación limpia"
+
+#: ckanext/harvest/controllers/view.py:111
+msgid "No content found"
+msgstr "No se ha encontrado contenido"
+
+#: ckanext/harvest/controllers/view.py:171
+msgid "Harvest job not found"
+msgstr "No se ha encontrado tarea de federación"
+
+#: ckanext/harvest/controllers/view.py:204
+#: ckanext/harvest/templates/source/admin.html:15
+#: ckanext/harvest/templates/source/job/list.html:13
+msgid "No jobs yet for this source"
+msgstr "No hay tareas todavía para esta fuente"
+
+#: ckanext/harvest/logic/auth/create.py:19
+msgid "User {0} not authorized to create harvest sources"
+msgstr "Usuario {0} no autorizado para crear fuentes de federación"
+
+#: ckanext/harvest/logic/auth/create.py:42
+msgid "User not authorized to create a job for source {0}"
+msgstr "Usuario no autorizado para crear una tarea para la fuente {0}"
+
+#: ckanext/harvest/logic/auth/create.py:52
+msgid "Only sysadmins can create harvest jobs for all sources"
+msgstr "Solo los administradores de sistemas pueden crear tareas de federación para todas las fuentes"
+
+#: ckanext/harvest/logic/auth/create.py:63
+msgid "Only the sysadmins can create harvest objects"
+msgstr "Solo los administradores de sistemas pueden crear objetos de federación"
+
+#: ckanext/harvest/logic/auth/delete.py:27
+msgid "User {0} not authorized to delete harvest source {1}"
+msgstr "Usuario {0} no autorizado para eliminar la fuente de federación {1}"
+
+#: ckanext/harvest/logic/auth/get.py:42
+msgid "User {0} not authorized to read harvest source {1}"
+msgstr "Usuario {0} no autorizado para leer la fuente de federación {1}"
+
+#: ckanext/harvest/logic/auth/get.py:82
+msgid "User {0} not authorized to see jobs from source {1}"
+msgstr "Usuario {0} no autorizado para ver las tareas de la fuente de federación {1}"
+
+#: ckanext/harvest/logic/auth/get.py:104
+msgid "User {0} not authorized to list jobs for source {1}"
+msgstr "Usuario {0} no autorizado para enumerar tareas para la fuente {1}"
+
+#: ckanext/harvest/logic/auth/update.py:28
+msgid "User {0} not authorized to update harvest source {1}"
+msgstr "Usuario {0} no autorizado para actualizar la fuente de federación {1}"
+
+#: ckanext/harvest/logic/auth/update.py:45
+msgid "Only sysadmins can reimport all harvest objects"
+msgstr "Solo los administradores de sistemas pueden volver a importar todos los objetos de la federación"
+
+#: ckanext/harvest/logic/auth/update.py:57
+msgid "Only sysadmins can run the pending harvest jobs"
+msgstr "Solo los administradores de sistemas pueden ejecutar tareas de federación "
+
+#: ckanext/harvest/logic/auth/update.py:89
+msgid "Only sysadmins can reindex all harvest sources"
+msgstr "Solo los administradores de sistemas pueden volver a indexar todas las fuentes de federación"
+
+#: ckanext/harvest/templates/snippets/add_source_button.html:6
+#: ckanext/harvest/templates/source/org_source_list.html:11
+msgid "Add Harvest Source"
+msgstr "Añadir fuente de federación"
+
+#: ckanext/harvest/templates/snippets/job_details.html:26
+#: ckanext/harvest/templates/source/job/list.html:44
+msgid "errors"
+msgstr "errores"
+
+#: ckanext/harvest/templates/snippets/job_details.html:41
+msgid "Details"
+msgstr "Detalles"
+
+#: ckanext/harvest/templates/snippets/job_details.html:48
+msgid "Id"
+msgstr "Identificador"
+
+#: ckanext/harvest/templates/snippets/job_details.html:52
+msgid "Created"
+msgstr "Creado"
+
+#: ckanext/harvest/templates/snippets/job_details.html:60
+msgid "Started"
+msgstr "Empezado"
+
+#: ckanext/harvest/templates/snippets/job_details.html:68
+msgid "Finished"
+msgstr "Terminado"
+
+#: ckanext/harvest/templates/snippets/job_details.html:76
+msgid "Status"
+msgstr "Estado"
+
+#: ckanext/harvest/templates/snippets/job_error_summary.html:18
+msgid "Count"
+msgstr "Contar"
+
+#: ckanext/harvest/templates/snippets/job_error_summary.html:19
+msgid "Message"
+msgstr "Mensaje"
+
+#: ckanext/harvest/templates/snippets/package_list_empty.html:1
+msgid "There are no datasets associated to this harvest source."
+msgstr "No hay conjuntos de datos asociados a esta fuente de federación."
+
+#: ckanext/harvest/templates/snippets/search_result_text.html:4
+msgid "{number} harvest source found for \"{query}\""
+msgid_plural "{number} harvest sources found for \"{query}\""
+msgstr[0] "{number} fuente de federación encontrada para \"{query}\""
+msgstr[1] "{number} fuentes de federación encontradas para \"{query}\""
+
+#: ckanext/harvest/templates/snippets/search_result_text.html:5
+#: ckanext/harvest/templates/source/org_source_list.html:17
+#: ckanext/harvest/templates/source/search_2.0.html:27
+msgid "Sorry no harvest sources found for \"{query}\""
+msgstr "Lo sentimos, no se encontraron fuentes de federación para \"{query}\""
+
+#: ckanext/harvest/templates/snippets/search_result_text.html:6
+msgid "{number} harvest source found"
+msgid_plural "{number} harvest sources found"
+msgstr[0] "{number} fuente de federación encontrada"
+msgstr[1] "{number} fuentes de federación encontradas"
+
+#: ckanext/harvest/templates/snippets/search_result_text.html:7
+#: ckanext/harvest/templates/source/org_source_list.html:25
+msgid "Sorry no harvest sources found"
+msgstr "Lo sentimos, no se encontraron fuentes de federación"
+
+#: ckanext/harvest/templates/snippets/source_item.html:28
+msgid "Draft"
+msgstr "Borrador"
+
+#: ckanext/harvest/templates/snippets/source_item.html:30
+#: ckanext/harvest/templates/source/new_source_form.html:83
+msgid "Deleted"
+msgstr "Eliminado"
+
+#: ckanext/harvest/templates/snippets/source_item.html:37
+#: ckanext/harvest/templates/source/about.html:9
+#: ckanext/harvest/templates/source/read_base.html:25
+msgid "There is no description for this harvest source"
+msgstr "No hay descripción para esta fuente de federación"
+
+#: ckanext/harvest/templates/snippets/source_item.html:42
+#: ckanext/harvest/templates/source/read.html:5
+#: ckanext/harvest/templates/source/read_base.html:30
+#: ckanext/harvest/templates/source/read_base.html:53
+msgid "Datasets"
+msgstr "Conjuntos de datos"
+
+#: ckanext/harvest/templates/snippets/source_item.html:45
+#: ckanext/harvest/templates/source/new_source_form.html:63
+#: ckanext/dge_harvest/plugin.py:112
+msgid "Organization"
+msgstr "Organización"
+
+#: ckanext/harvest/templates/source/admin.html:5
+msgid "Last Harvest Job"
+msgstr "Última tarea de federación"
+
+#: ckanext/harvest/templates/source/admin.html:11
+msgid "View full job report"
+msgstr "Ver informe completo de tareas"
+
+#: ckanext/harvest/templates/source/admin_base.html:7
+#: ckanext/harvest/templates/source/read_base.html:4
+msgid "Admin"
+msgstr "Administrador"
+
+#: ckanext/harvest/templates/source/admin_base.html:15
+msgid ""
+"This will re-run the harvesting for this source. Any updates at the "
+"source will overwrite the local datasets. Sources with a large number of "
+"datasets may take a significant amount of time to finish harvesting. "
+"Please confirm you would like us to start reharvesting."
+msgstr ""
+"Esto volverá a ejecutar la federación para esta fuente. Cualquier actualización en la fuente sobreescribirá los conjuntos de datos locales. Las fuentes que cuentan con un gran número de conjuntos de datos pueden tardar un tiempo en terminar la federación. Confirme que le gustaría que empezáramos de nuevo la federación."
+
+#: ckanext/harvest/templates/source/admin_base.html:18
+msgid "Start a new harvesting job for this harvest source now"
+msgstr "Iniciar ahora una nueva tarea de federación para esta fuente"
+
+#: ckanext/harvest/templates/source/admin_base.html:20
+msgid "Reharvest"
+msgstr "Volver a federar"
+
+#: ckanext/harvest/templates/source/admin_base.html:24
+msgid ""
+"Warning: This will remove all datasets for this source, as well as all "
+"previous job reports. Are you sure you want to continue?"
+msgstr ""
+"Advertencia: Esto eliminará todos los conjuntos de datos para esta fuente, así como todos los informes de tareas anteriores. ¿Está seguro de que quiere continuar?"
+
+#: ckanext/harvest/templates/source/admin_base.html:27
+msgid "Delete all harvest jobs and existing datasets from this source"
+msgstr "Eliminar todas las tareas de federación y los conjuntos de datos existentes de esta fuente"
+
+#: ckanext/harvest/templates/source/admin_base.html:28
+msgid "Clear"
+msgstr "Eliminar datasets"
+
+#: ckanext/harvest/templates/source/admin_base.html:32
+msgid "View harvest source"
+msgstr "Ver la fuente de federación"
+
+#: ckanext/harvest/templates/source/admin_base.html:48
+msgid "Dashboard"
+msgstr "Cuadro de mando"
+
+#: ckanext/harvest/templates/source/admin_base.html:49
+msgid "Jobs"
+msgstr "Tareas"
+
+#: ckanext/harvest/templates/source/admin_base.html:50
+msgid "Edit"
+msgstr "Editar"
+
+#: ckanext/harvest/templates/source/base.html:17
+msgid "Organizations"
+msgstr "Organizaciones"
+
+#: ckanext/harvest/templates/source/base.html:19
+#: ckanext/harvest/templates/source/base.html:22
+#: ckanext/harvest/templates/source/new.html:4
+#: ckanext/harvest/templates/source/org_source_list.html:3
+#: ckanext/harvest/templates/source/org_source_list.html:7
+#: ckanext/harvest/templates/source/org_source_list.html:19
+#: ckanext/harvest/templates/source/search.html:7
+msgid "Harvest Sources"
+msgstr "Fuentes de federación"
+
+#: ckanext/harvest/templates/source/edit.html:3
+msgid "Edit harvest source"
+msgstr "Editar fuente de federación"
+
+#: ckanext/harvest/templates/source/new.html:5
+msgid "Create Harvest Source"
+msgstr "Crear fuente de federación"
+
+#: ckanext/harvest/templates/source/new.html:11
+msgid "Create harvest source"
+msgstr "Crear fuente de federación"
+
+#: ckanext/harvest/templates/source/new.html:23
+#: ckanext/harvest/templates/source/search.html:3
+msgid "Harvest sources"
+msgstr "Fuentes de federación"
+
+#: ckanext/harvest/templates/source/new.html:26
+msgid ""
+" Harvest sources allow importing remote metadata into this catalog. "
+"Remote sources can be other catalogs such as other CKAN instances, CSW "
+"servers or Web Accessible Folders (WAF) (depending on the actual "
+"harvesters enabled for this instance). "
+msgstr ""
+"Las fuentes de federación permiten la importación de metadatos remotos a este catálogo. Las fuentes remotas pueden ser otros catálogos como otras instancias CKAN, servidores CSW o carpetas accesibles en la web (WAF) (dependiendo de los harvesters reales habilitados para esta instancia)."
+
+#: ckanext/harvest/templates/source/new_source_form.html:8
+msgid "URL"
+msgstr "URL"
+
+#: ckanext/harvest/templates/source/new_source_form.html:10
+msgid "This should include the http:// part of the URL"
+msgstr "Indicar una URL externa válida donde estará alojado el RDF que se desea federar. Ejemplo: https://organismoejemplo.es/.../catalogo.rdf"
+
+#: ckanext/harvest/templates/source/new_source_form.html:45
+#: ckanext/dge/assets/js/dge-slug-preview.js:58
+msgid "Internal URL associated with the federation source"
+msgstr "URL interna asociada a la fuente de federación"
+
+#: ckanext/harvest/templates/source/new_source_form.html:14
+msgid "Title"
+msgstr "Título"
+
+#: ckanext/harvest/templates/source/new_source_form.html:14
+msgid "eg. A descriptive title"
+msgstr "por ejemplo un título descriptivo"
+
+#: ckanext/harvest/templates/source/new_source_form.html:21
+msgid "Name"
+msgstr "Nombre"
+
+#: ckanext/harvest/templates/source/new_source_form.html:21
+msgid "eg. my-dataset"
+msgstr "por ejemplo mi-conjunto-de-datos"
+
+#: ckanext/harvest/templates/source/new_source_form.html:23
+msgid "Description"
+msgstr "Descripción"
+
+#: ckanext/harvest/templates/source/new_source_form.html:43
+msgid "Update frequency"
+msgstr "Frecuencia de actualización"
+
+#: ckanext/harvest/templates/source/new_source_form.html:46
+msgid "Configuration"
+msgstr "Configuración"
+
+#: ckanext/harvest/templates/source/new_source_form.html:66
+msgid "No organization"
+msgstr "Ninguna organización"
+
+#: ckanext/harvest/templates/source/new_source_form.html:79
+msgid "State"
+msgstr "Estado"
+
+#: ckanext/harvest/templates/source/new_source_form.html:82
+msgid "Active"
+msgstr "Activo"
+
+#: ckanext/harvest/templates/source/new_source_form.html:95
+msgid "Confirmation of this will delete the federation source and all federated datasets in federation tasks carried out. Warning: if you delete this source, as well as the federated datasets, you will also be deleting all previous task reports. Do this if you want to delete both the source and federated datasets and create a new source to federate new datasets. Are you sure you want to delete this federation source and all federated datasets?"
+msgstr "La confirmación de esta acción eliminará la fuente de federación y todos los conjuntos de datos federados en las tareas de federación realizadas. Advertencia: si elimina esta fuente, además de los conjuntos de datos federados, eliminará también todos los informes de tareas anteriores. Utilice esta acción si desea eliminar la fuente y los conjuntos de datos federados, y desea crear una nueva fuente para federar nuevos conjuntos de datos. ¿Está seguro de que quiere eliminar esta fuente de federación y todos los conjuntos de datos federados?"
+
+#: ckanext/harvest/templates/source/new_source_form.html:96
+msgid "Confirmation of this will delete the federation source but keep all federated datasets in previous tasks. Warning: if you delete this source and create a new one that contains already federated datasets, twice as many data sheets will be published on the portal. You should only do this if you want to delete the source and reassign the federated datasets to another publisher (in this case, please inform soporte@datos.gob.es). Are you sure you want to delete this federation source and keep the federated datasets?"
+msgstr "La confirmación de esta acción eliminará la fuente de federación pero mantendrá todos los conjuntos de datos federados en tareas anteriores. Advertencia: si elimina esta fuente y crea una nueva que contenga los datasets ya federados se duplicarán los datasets publicados en el portal. Se recomienda usar esta opción solo si desea eliminar la fuente y reasignar los conjuntos de datos federados a otro publicador (en este caso, rogamos comunique esta circunstancia a soporte@datos.gob.es) ¿Está seguro de que quiere eliminar esta fuente de federación y mantener los datasets federados?"
+
+#: ckanext/harvest/templates/source/new_source_form.html:96
+msgid "Delete"
+msgstr "Eliminar"
+
+#: ckanext/harvest/templates/source/new_source_form.html:98
+msgid "Delete source and datasets"
+msgstr "Eliminar fuente y datasets"
+
+#: ckanext/harvest/templates/source/new_source_form.html:101
+#: ckanext/harvest/templates/source/new_source_form.html:100
+msgid "Delete source and keep datasets"
+msgstr "Eliminar fuente y mantener datasets"
+
+#: ckanext/harvest/templates/source/new_source_form.html:97
+msgid "It deletes the federation source and related datasets"
+msgstr "Elimina la fuente de federación y los conjuntos de datos vinculados con esta"
+
+#: ckanext/harvest/templates/source/old_new_source_form.html:5
+msgid "Return to the harvest sources list"
+msgstr "Regresar a la lista de fuentes de federación"
+
+#: ckanext/harvest/templates/source/org_source_list.html:15
+#: ckanext/harvest/templates/source/search_2.0.html:25
+msgid " found for \"{query}\""
+msgstr "encontrado para \"{query}\""
+
+#: ckanext/harvest/templates/source/org_source_list.html:31
+msgid "Search sources..."
+msgstr "Buscar fuentes..."
+
+#: ckanext/harvest/templates/source/org_source_list.html:32
+#: ckanext/harvest/templates/source/search_2.0.html:8
+msgid "Search"
+msgstr "Buscar"
+
+#: ckanext/harvest/templates/source/read_base.html:22
+msgid "read more"
+msgstr "leer más"
+
+#: ckanext/harvest/templates/source/read_base.html:54
+msgid "About"
+msgstr "Acerca de"
+
+#: ckanext/harvest/templates/source/search.html:44
+msgid "Relevance"
+msgstr "Relevancia"
+
+#: ckanext/harvest/templates/source/search.html:45
+msgid "Name Ascending"
+msgstr "Nombre ascendente"
+
+#: ckanext/harvest/templates/source/search.html:46
+msgid "Name Descending"
+msgstr "Nombre descendente"
+
+#: ckanext/harvest/templates/source/search.html:47
+msgid "Last Modified"
+msgstr "Última modificación"
+
+#: ckanext/harvest/templates/source/search.html:48
+msgid "Popular"
+msgstr "Popular"
+
+#: ckanext/harvest/templates/source/search.html:50
+msgid "Search harvest sources..."
+msgstr "Buscar fuente de federación..."
+
+#: ckanext/harvest/templates/source/search_2.0.html:7
+msgid "Search..."
+msgstr "Buscar..."
+
+#: ckanext/harvest/templates/source/search_2.0.html:29
+msgid "All harvest sources"
+msgstr "Todas las fuentes de federación"
+
+#: ckanext/harvest/templates/source/search_2.0.html:42
+msgid "Remove"
+msgstr "Quitar"
+
+#: ckanext/harvest/templates/source/search_2.0.html:48
+msgid "Try another search term, browse the sources below or "
+msgstr "Intentarlo con otro término de búsqueda, revisar las fuentes de abajo o"
+
+#: ckanext/harvest/templates/source/search_2.0.html:49
+msgid "add a new one"
+msgstr "añadir una nueva"
+
+#: ckanext/harvest/templates/source/search_2.0.html:55
+msgid ""
+" <p><strong>There was an error while searching.</strong> Please try "
+"again.</p> "
+msgstr ""
+"<p><strong>Se produjo un error durante la búsqueda.</strong> Inténtelo de nuevo.</p>"
+
+#: ckanext/harvest/templates/source/job/list.html:5
+#: ckanext/harvest/templates/source/job/list.html:10
+msgid "Harvest Jobs"
+msgstr "Tareas de federación"
+
+#: ckanext/harvest/templates/source/job/list.html:21
+msgid "Job: "
+msgstr "Tarea:"
+
+#: ckanext/harvest/templates/source/job/list.html:28
+msgid "Started:"
+msgstr "Empezada:"
+
+#: ckanext/harvest/templates/source/job/list.html:30
+#: ckanext/harvest/templates/source/job/list.html:35
+msgid "Not yet"
+msgstr "Aún no"
+
+#: ckanext/harvest/templates/source/job/list.html:33
+msgid "Finished:"
+msgstr "Terminada:"
+
+#: ckanext/harvest/templates/source/job/read.html:3
+#: ckanext/harvest/templates/source/job/read.html:12
+msgid "Job Report"
+msgstr "Informe de tareas"
+
+#: ckanext/harvest/templates/source/job/read.html:9
+msgid "Back to job list"
+msgstr "Volver a la lista de tareas"
+
+#: ckanext/harvest/templates/source/job/read.html:18
+#: ckanext/harvest/templates/source/job/read.html:22
+msgid "Error Summary"
+msgstr "Resumen de errores"
+
+#: ckanext/harvest/templates/source/job/read.html:19
+msgid "No errors for this job"
+msgstr "No hay errores para esta tarea"
+
+#: ckanext/harvest/templates/source/job/read.html:23
+msgid "Only the 20 most frequent errors are shown"
+msgstr "Solo se muestran los 20 errores más frecuentes"
+
+#: ckanext/harvest/templates/source/job/read.html:26
+#: ckanext/harvest/templates/source/job/read.html:40
+msgid "Job Errors"
+msgstr "Errores de tareas"
+
+#: ckanext/harvest/templates/source/job/read.html:30
+#: ckanext/harvest/templates/source/job/read.html:57
+msgid "Document Errors"
+msgstr "Errores de documentos"
+
+#: ckanext/harvest/templates/source/job/read.html:37
+msgid "Error Report"
+msgstr "Informe de errores"
+
+#: ckanext/harvest/templates/source/job/read.html:58
+msgid "documents with errors"
+msgstr "documentos con errores"
+
+#: ckanext/harvest/templates/source/job/read.html:69
+msgid "Remote content"
+msgstr "Contenido remoto"
+
+#: ckanext/harvest/templates/source/job/read.html:73
+msgid "Local content"
+msgstr "Contenido local"
+
+#: ckanext/dge_harvest/plugin.py:111
+msgid "Source type"
+msgstr "Tipo de federación"
+
+#: ckanext/dge_harvest/plugin.py:110
+msgid "Frequency"
+msgstr "Frecuencia"
+
+#: /ckanext/dge_harvest/templates/source/admin_base.html:25
+msgid "Stop"
+msgstr "Parar"
