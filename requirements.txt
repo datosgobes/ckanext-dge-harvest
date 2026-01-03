@@ -1,4 +1,5 @@
-ckantoolkit>=0.0.7
-pika>=1.1.0,<1.3.0
-redis
-requests>=2.11.1
+isodate==0.5.4
+iso8601==0.1.11
+losser==0.0.3
+httpretty
+rfc3987
