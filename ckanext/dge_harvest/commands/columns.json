@@ -2,6 +2,9 @@
     "URL": {
         "pattern": "^url$"
     },
+    "TIPO DE ENTIDAD": {
+        "pattern": "^entity_type$"
+    },
     "IDENTIFICADOR": {
         "pattern": "^identifier$"
     },
@@ -52,5 +55,8 @@
     },
     "DISTRIBUCIONES": {
       "pattern": "^resources$"
+    },
+    "URL DE ACCESO": {
+         "pattern": "^endpoint_url$"
     }
 }

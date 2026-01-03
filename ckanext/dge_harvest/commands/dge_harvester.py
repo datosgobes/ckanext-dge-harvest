@@ -1,6 +1,6 @@
-# Copyright (C) 2022 Entidad Pública Empresarial Red.es
+# Copyright (C) 2025 Entidad Pública Empresarial Red.es
 #
-# This file is part of "dge_harvest (datos.gob.es)".
+# This file is part of "dge-harvest (datos.gob.es)".
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -9,7 +9,7 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
@@ -77,7 +77,7 @@ class DgeHarvester(CkanCommand):
 
     def command(self):
         method_log_prefix = '[%s][command]' % type(self).__name__
-        print "%s Init method. Args=%s" % (method_log_prefix, self.args)
+        print("%s Init method. Args=%s" % (method_log_prefix, self.args))
         ini = datetime.datetime.now()
         self._load_config()
 
@@ -101,17 +101,17 @@ class DgeHarvester(CkanCommand):
         elif cmd == 'get_running_harvest_jobs':
             self.get_running_harvest_job()
         else:
-            print '%s Command %s not recognized' % (method_log_prefix, cmd)
+            print('%s Command %s not recognized' % (method_log_prefix, cmd))
 
         end = datetime.datetime.now()
-        print '%s End method. ...Command total runned time: %s milliseconds' % (method_log_prefix, int((end - ini).total_seconds() * 1000))
+        print('%s End method. ...Command total runned time: %s milliseconds' % (method_log_prefix, int((end - ini).total_seconds() * 1000)))
 
     def _load_config(self):
         super(DgeHarvester, self)._load_config()
 
     def generate_catalog(self, _format='rdf'):
         method_log_prefix = '[%s][generate_catalog]' % type(self).__name__
-        print '%s Init method. Inputs: _format=%s' % (method_log_prefix, _format)
+        print('%s Init method. Inputs: _format=%s' % (method_log_prefix, _format))
         context = {
                 'model':model,
                 'session':model.Session,
@@ -121,9 +121,9 @@ class DgeHarvester(CkanCommand):
 
         if len(self.args) >= 2:
             try:
-                _limit = int(float(unicode(self.args[1])))
+                _limit = int(float(str(self.args[1])))
             except ValueError as e:
-                print '%s Please provide the limit of datasets to export' % (method_log_prefix)
+                print('%s Please provide the limit of datasets to export' % (method_log_prefix))
                 sys.exit(1)
         else:
             _limit = -1
@@ -135,11 +135,11 @@ class DgeHarvester(CkanCommand):
 
         catalog = get_action('dge_harvest_catalog_show')(context,data_dict)
 
-        print '%s End method' % (method_log_prefix)
+        print('%s End method' % (method_log_prefix))
 
     def generate_catalog_EDP(self, _format='rdf'):
         method_log_prefix = '[%s][generate_catalog]' % type(self).__name__
-        print '%s Init method. Inputs: _format=%s' % (method_log_prefix, _format)
+        print('%s Init method. Inputs: _format=%s' % (method_log_prefix, _format))
         context = {
                 'model':model,
                 'session':model.Session,
@@ -149,9 +149,9 @@ class DgeHarvester(CkanCommand):
 
         if len(self.args) >= 2:
             try:
-                _limit = int(float(unicode(self.args[1])))
+                _limit = int(float(str(self.args[1])))
             except ValueError as e:
-                print '%s Please provide the limit of datasets to export' % (method_log_prefix)
+                print('%s Please provide the limit of datasets to export' % (method_log_prefix))
                 sys.exit(1)
         else:
             _limit = -1
@@ -161,14 +161,14 @@ class DgeHarvester(CkanCommand):
             'limit': _limit
         }
 
-        catalog = get_action('dge_harvest_catalog_show_EDP')(context,data_dict)
+        catalog = get_action('dge_harvest_catalog_show_edp')(context,data_dict)
 
-        print '%s End method' % (method_log_prefix)
+        print('%s End method' % (method_log_prefix))
 
     def clear_old_harvest_jobs(self):
         source_id = None
         if len(self.args) >= 2:
-            source_id = unicode(self.args[1])
+            source_id = str(self.args[1])
 
         context = {
             'model': model,
@@ -183,23 +183,23 @@ class DgeHarvester(CkanCommand):
         if cleared_sources:
             sources = ''
             for item in cleared_sources:
-                print 'Cleared job history for harvest source: %s' % item.get('name', item.get('id', ''))
+                print('Cleared job history for harvest source: %s' % item.get('name', item.get('id', '')))
         else:
-            print 'Cleared job history for any harvest source'
+            print('Cleared job history for any harvest source')
 
     def get_running_harvest_job(self):
         method_log_prefix = '[%s][get_running_harvest_job]' % type(self).__name__
-        print '%s Init method' % (method_log_prefix)
+        print('%s Init method' % (method_log_prefix))
 
         minutes = None
         if len(self.args) >= 2:
             try:
                 minutes = int(self.args[1])
             except ValueError as e:
-                print '%s Please provide a valid value for minutes' % (method_log_prefix)
+                print('%s Please provide a valid value for minutes' % (method_log_prefix))
                 sys.exit(1)
         else:
-            print '%s Please provide a value for the minutes' % (method_log_prefix)
+            print('%s Please provide a value for the minutes' % (method_log_prefix))
             sys.exit(1)
 
         context = {
@@ -208,13 +208,13 @@ class DgeHarvester(CkanCommand):
             'session': model.Session
         }
         if minutes <= 0:
-            print '%s Please provide a valid value for minutes' % (method_log_prefix)
+            print('%s Please provide a valid value for minutes' % (method_log_prefix))
             sys.exit(1)
 
         harvest_jobs = get_action('dge_harvest_get_running_harvest_jobs')(context,{'minutes':minutes})
         if harvest_jobs:
             for job in harvest_jobs:
-                print '''Job with id %s for harvest source %s has been running longer than the configured threshold. 
-                         ''' % (job.get('job_id'), job.get('source_name'))
+                print('''Job with id %s for harvest source %s has been running longer than the configured threshold. 
+                         ''' % (job.get('job_id'), job.get('source_name')))
         else:
-            print '''No job has been running longer than the configured threshold.'''
+            print('''No job has been running longer than the configured threshold.''')

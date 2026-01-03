@@ -1,6 +1,6 @@
-# Copyright (C) 2022 Entidad Pública Empresarial Red.es
+# Copyright (C) 2025 Entidad Pública Empresarial Red.es
 #
-# This file is part of "dge_harvest (datos.gob.es)".
+# This file is part of "dge-harvest (datos.gob.es)".
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -9,7 +9,7 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
@@ -32,7 +32,7 @@ setup(
     # Versions should comply with PEP440.  For a discussion on single-sourcing
     # the version across setup.py and the project code, see
     # http://packaging.python.org/en/latest/tutorial.html#version
-    version='0.0.1',
+    version='1.0.0',
 
     description='''''',
     long_description=long_description,
@@ -60,8 +60,7 @@ setup(
 
         # Specify the Python versions you support here. In particular, ensure
         # that you indicate whether you support Python 2, Python 3 or both.
-        'Programming Language :: Python :: 2.6',
-        'Programming Language :: Python :: 2.7',
+        'Programming Language :: Python :: 3.9',
     ],
 
 
@@ -97,13 +96,16 @@ setup(
     entry_points='''
         [ckan.plugins]
         dge_harvest=ckanext.dge_harvest.plugin:DgeHarvestPlugin
-        dge_rdf_harvester=ckanext.dge_harvest.harvesters:DGERDFHarvester
+        dge_nti_rdf_harvester=ckanext.dge_harvest.harvesters:DGENTIRDFHarvester
+        dge_dcat_ap_es_rdf_harvester=ckanext.dge_harvest.harvesters:DGEDCATAPESRDFHarvester
         
 
         [ckan.rdf.profiles]
-        dge_profile=ckanext.dge_harvest.profiles:DgeProfile
-        dge_migrate_profile=ckanext.dge_harvest.profiles:DgeMigrateProfile
-        dge_migrate_drupal_profile=ckanext.dge_harvest.profiles:DgeMigrateDrupalProfile
+        #dge_profile=ckanext.dge_harvest.profiles:DgeProfile
+        #dge_migrate_profile=ckanext.dge_harvest.profiles:DgeMigrateProfile
+        #dge_migrate_drupal_profile=ckanext.dge_harvest.profiles:DgeMigrateDrupalProfile
+        dge_nti_profile = ckanext.dge_harvest.profiles.dge_nti_profile:DGENTIProfile
+        dge_dcat_ap_es_profile = ckanext.dge_harvest.profiles.dge_dcat_ap_es_profile:DGEDCATAPESProfile
 
         [paste.paster_command]
         dge_harvester = ckanext.dge_harvest.commands.dge_harvester:DgeHarvester

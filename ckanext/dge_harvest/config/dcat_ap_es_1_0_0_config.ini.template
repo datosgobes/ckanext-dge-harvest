@@ -1,0 +1,290 @@
+[basic]
+## Properties to store vocabularies used in dcat_ap_es_1.0.0 in virtuoso
+
+# Graph name
+vocabularies.graph_name = SITE_URL/graph/vocabularies_dcat_ap_es_1_0_0
+
+# Vocabularies URIs
+vocabularies.uris = http://publications.europa.eu/resource/authority/atu
+					http://publications.europa.eu/resource/authority/licence
+					http://publications.europa.eu/resource/authority/language
+					http://publications.europa.eu/resource/authority/continent
+					http://publications.europa.eu/resource/authority/country
+					http://publications.europa.eu/resource/authority/data-theme
+					http://publications.europa.eu/resource/authority/dataset-type
+					http://publications.europa.eu/resource/authority/file-type
+					http://publications.europa.eu/resource/authority/frequency
+					http://publications.europa.eu/resource/authority/place
+					http://publications.europa.eu/resource/authority/planned-availability
+					http://publications.europa.eu/resource/authority/access-right
+					http://publications.europa.eu/resource/authority/distribution-status
+					http://inspire.ec.europa.eu/theme
+					http://inspire.ec.europa.eu/metadata-codelist/ResourceType
+					http://publications.europa.eu/resource/authority/bna/asd487ae75
+
+
+# vocabularies whose download URI is different from the vocabulary URI. Format by line: vocabulary_uri|download_vocabulary_uri
+vocabularies.uris.different_download_uri = http://inspire.ec.europa.eu/theme|http://inspire.ec.europa.eu/theme/theme.es.rdf
+											http://inspire.ec.europa.eu/metadata-codelist/ResourceType|http://inspire.ec.europa.eu/metadata-codelist/ResourceType/ResourceType.es.rdf
+
+# files that contains ontologies, that are used in shacl validation.
+shacl.ontology = 
+##	/var/lib/ckan/default/src/ckanext-dge-harvest/ckanext/dge_harvest/shacl_shapes/dcat-ap-es_1.0.0/shacl_imports.ttl
+##	/var/lib/ckan/default/src/ckanext-dge-harvest/ckanext/dge_harvest/shacl_shapes/dcat-ap-es_1.0.0/shacl_mdr_imports.ttl
+#	https://github.com/SEMICeu/DCAT-AP/raw/master/releases/2.0.1/dcat-ap_2.0.1.rdf
+##	https://github.com/SEMICeu/ADMS-AP/raw/master/purl.org/ADMS_SKOS_v1.00.rdf
+#	https://www.w3.org/ns/dcat2.ttl
+##	http://dublincore.org/2020/01/20/dublin_core_terms.ttl
+#	http://xmlns.com/foaf/spec/index.rdf
+#	https://www.w3.org/ns/locn.ttl
+##	https://spdx.org/rdf/terms/spdx-ontology.owl.xml
+##	https://schema.org/version/latest/schema.ttl
+#	http://www.w3.org/ns/prov-o.ttl
+#	http://www.w3.org/2006/time.ttl
+#	http://www.w3.org/2006/vcard/ns.ttl
+#	http://www.w3.org/ns/adms.ttl
+
+[catalog]
+# This section contains properties used for validation and harvesting of catalogs: metadata, vocabularies, shacl templates, ....
+
+# Associate each metadata with its allowed vocabulary: List of pairs metadata|vocabulary.
+catalog.metadata.vocabularies = http://publications.europa.eu/resource/authority/licence|http://purl.org/dc/terms/license
+						        http://publications.europa.eu/resource/authority/language|http://purl.org/dc/terms/language
+						        http://publications.europa.eu/resource/authority/continent|http://purl.org/dc/terms/spatial
+						        http://publications.europa.eu/resource/authority/country|http://purl.org/dc/terms/spatial
+                                http://publications.europa.eu/resource/authority/place|http://purl.org/dc/terms/spatial
+								http://publications.europa.eu/resource/authority/atu|http://purl.org/dc/terms/spatial
+#						        http://publications.europa.eu/resource/authority/access-right|http://purl.org/dc/terms/accessRights
+
+# Associate each metadata with its allowed HVD vocabulary: List of pairs metadata|vocabulary.
+catalog.metadata.vocabularies.hvd =
+
+# Path of shacl-shapes files
+shacl.shapes.files.path = /var/lib/ckan/default/src/ckanext-dge-harvest/ckanext/dge_harvest/shacl_shapes/dcat-ap-es_1.0.0
+
+catalog.shacl.shapes =  %(shacl.shapes.files.path)s/shacl_mdr-vocabularies.shape.ttl
+						%(shacl.shapes.files.path)s/shacl_common_shapes.ttl
+						%(shacl.shapes.files.path)s/shacl_catalog_shape.ttl
+
+catalog.shacl.shapes.hvd =  
+
+[dataservice]
+# This section contains properties used for validation and harvesting of dataservices: metadata, vocabularies, shacl templates, ....
+
+# Associate each metadata with its allowed vocabulary: List of pairs metadata|vocabulary
+dataservice.metadata.vocabularies  =    http://publications.europa.eu/resource/authority/licence|http://purl.org/dc/terms/license
+										http://publications.europa.eu/resource/authority/access-right|http://purl.org/dc/terms/accessRights
+										http://publications.europa.eu/resource/authority/data-theme|http://www.w3.org/ns/dcat#theme
+										http://inspire.ec.europa.eu/theme|http://www.w3.org/ns/dcat#theme
+
+# Associate each metadata with its allowed HVD vocabulary: List of pairs metadata|vocabulary.
+dataservice.metadata.vocabularies.hvd  =    http://publications.europa.eu/resource/authority/bna/asd487ae75|http://data.europa.eu/r5r/hvdCategory
+
+
+# Path of shacl-shapes files
+shacl.shapes.files.path = /var/lib/ckan/default/src/ckanext-dge-harvest/ckanext/dge_harvest/shacl_shapes/dcat-ap-es_1.0.0
+
+dataservice.shacl.shapes =  %(shacl.shapes.files.path)s/shacl_mdr-vocabularies.shape.ttl
+							%(shacl.shapes.files.path)s/shacl_common_shapes.ttl
+							%(shacl.shapes.files.path)s/shacl_dataservice_shape.ttl
+
+dataservice.shacl.shapes.hvd =  %(shacl.shapes.files.path)s/hvd/shacl_common_hvd_shapes.ttl
+								%(shacl.shapes.files.path)s/hvd/shacl_dataservice_hvd_shape.ttl
+
+[dataset]
+# This section contains properties used for validation and harvesting of datasets: metadata, vocabularies, shacl templates, ....
+
+# Associate each metadata with its allowed vocabulary: List of pairs metadata|vocabulary
+dataset.metadata.vocabularies  = 	http://publications.europa.eu/resource/authority/language|http://purl.org/dc/terms/language
+									http://publications.europa.eu/resource/authority/continent|http://purl.org/dc/terms/spatial
+									http://publications.europa.eu/resource/authority/country|http://purl.org/dc/terms/spatial
+									http://publications.europa.eu/resource/authority/place|http://purl.org/dc/terms/spatial
+									http://publications.europa.eu/resource/authority/atu|http://purl.org/dc/terms/spatial
+									http://publications.europa.eu/resource/authority/dataset-type|http://purl.org/dc/terms/type
+									http://inspire.ec.europa.eu/metadata-codelist/ResourceType|http://purl.org/dc/terms/type
+									http://publications.europa.eu/resource/authority/frequency|http://purl.org/dc/terms/accrualPeriodicity
+									http://publications.europa.eu/resource/authority/access-right|http://purl.org/dc/terms/accessRights
+									http://publications.europa.eu/resource/authority/data-theme|http://www.w3.org/ns/dcat#theme
+									http://inspire.ec.europa.eu/theme|http://www.w3.org/ns/dcat#theme
+
+# Associate each metadata with its allowed HVD vocabulary: List of pairs metadata|vocabulary.
+dataset.metadata.vocabularies.hvd  =    http://publications.europa.eu/resource/authority/bna/asd487ae75|http://data.europa.eu/r5r/hvdCategory
+
+# Path of shacl-shapes files
+shacl.shapes.files.path = /var/lib/ckan/default/src/ckanext-dge-harvest/ckanext/dge_harvest/shacl_shapes/dcat-ap-es_1.0.0
+
+dataset.shacl.shapes = 	%(shacl.shapes.files.path)s/shacl_mdr-vocabularies.shape.ttl
+						%(shacl.shapes.files.path)s/shacl_common_shapes.ttl
+						%(shacl.shapes.files.path)s/shacl_dataset_shape.ttl
+
+dataset.shacl.shapes.hvd = 	%(shacl.shapes.files.path)s/hvd/shacl_common_hvd_shapes.ttl
+							%(shacl.shapes.files.path)s/hvd/shacl_dataset_hvd_shape.ttl
+
+[distribution]
+# This section contains properties used for validation and harvesting of distributions: metadata, vocabularies, shacl templates, ....
+
+# Associate each metadata with its allowed vocabulary: List of pairs metadata|vocabulary
+distribution.metadata.vocabularies  =   http://publications.europa.eu/resource/authority/licence|http://purl.org/dc/terms/license
+							            http://publications.europa.eu/resource/authority/language|http://purl.org/dc/terms/language
+							            http://publications.europa.eu/resource/authority/planned-availability|http://data.europa.eu/r5r/availability
+							            http://publications.europa.eu/resource/authority/distribution-status|http://www.w3.org/ns/adms#status
+										http://publications.europa.eu/resource/authority/file-type|http://purl.org/dc/terms/format
+
+# Associate each metadata with its allowed HVD vocabulary: List of pairs metadata|vocabulary.
+distribution.metadata.vocabularies.hvd  =    
+
+# Path of shacl-shapes files
+shacl.shapes.files.path = /var/lib/ckan/default/src/ckanext-dge-harvest/ckanext/dge_harvest/shacl_shapes/dcat-ap-es_1.0.0
+
+distribution.shacl.shapes = %(shacl.shapes.files.path)s/shacl_mdr-vocabularies.shape.ttl
+							%(shacl.shapes.files.path)s/shacl_common_shapes.ttl
+							%(shacl.shapes.files.path)s/shacl_distribution_shape.ttl
+
+distribution.shacl.shapes.hvd = %(shacl.shapes.files.path)s/hvd/shacl_common_hvd_shapes.ttl
+								%(shacl.shapes.files.path)s/hvd/shacl_distribution_hvd_shape.ttl
+
+[rdf.export]
+# This section contains properties used to export the catalog in RDF.
+
+# URI of European theme taxonomy
+rdf.export.european.theme.taxonomy= http://publications.europa.eu/resource/authority/data-theme
+
+# Mapping between NTI-RIPS themes and European themes: Each row contains <NTI-RISP-theme>|<corresponding European theme>
+rdf.export.mapping.nti_risp_theme.european_theme = http://datos.gob.es/kos/sector-publico/sector/ciencia-tecnologia|http://publications.europa.eu/resource/authority/data-theme/TECH
+										http://datos.gob.es/kos/sector-publico/sector/comercio|http://publications.europa.eu/resource/authority/data-theme/ECON
+										http://datos.gob.es/kos/sector-publico/sector/cultura-ocio|http://publications.europa.eu/resource/authority/data-theme/EDUC
+										http://datos.gob.es/kos/sector-publico/sector/demografia|http://publications.europa.eu/resource/authority/data-theme/SOCI
+										http://datos.gob.es/kos/sector-publico/sector/deporte|http://publications.europa.eu/resource/authority/data-theme/EDUC
+										http://datos.gob.es/kos/sector-publico/sector/economia|http://publications.europa.eu/resource/authority/data-theme/ECON
+										http://datos.gob.es/kos/sector-publico/sector/educacion|http://publications.europa.eu/resource/authority/data-theme/EDUC
+										http://datos.gob.es/kos/sector-publico/sector/empleo|http://publications.europa.eu/resource/authority/data-theme/ECON
+										http://datos.gob.es/kos/sector-publico/sector/energia|http://publications.europa.eu/resource/authority/data-theme/ENER
+										http://datos.gob.es/kos/sector-publico/sector/hacienda|http://publications.europa.eu/resource/authority/data-theme/GOVE
+										http://datos.gob.es/kos/sector-publico/sector/industria|http://publications.europa.eu/resource/authority/data-theme/ECON    
+										http://datos.gob.es/kos/sector-publico/sector/legislacion-justicia|http://publications.europa.eu/resource/authority/data-theme/JUST    
+										http://datos.gob.es/kos/sector-publico/sector/medio-ambiente|http://publications.europa.eu/resource/authority/data-theme/ENVI
+										http://datos.gob.es/kos/sector-publico/sector/medio-rural-pesca|http://publications.europa.eu/resource/authority/data-theme/AGRI
+										http://datos.gob.es/kos/sector-publico/sector/salud|http://publications.europa.eu/resource/authority/data-theme/HEAL
+										http://datos.gob.es/kos/sector-publico/sector/sector-publico|http://publications.europa.eu/resource/authority/data-theme/GOVE
+										http://datos.gob.es/kos/sector-publico/sector/seguridad|http://publications.europa.eu/resource/authority/data-theme/JUST    
+										http://datos.gob.es/kos/sector-publico/sector/sociedad-bienestar|http://publications.europa.eu/resource/authority/data-theme/SOCI    
+										http://datos.gob.es/kos/sector-publico/sector/transporte|http://publications.europa.eu/resource/authority/data-theme/TRAN    
+										http://datos.gob.es/kos/sector-publico/sector/turismo|http://publications.europa.eu/resource/authority/data-theme/ECON    
+										http://datos.gob.es/kos/sector-publico/sector/urbanismo-infraestructuras|http://publications.europa.eu/resource/authority/data-theme/REGI
+										http://datos.gob.es/kos/sector-publico/sector/vivienda|http://publications.europa.eu/resource/authority/data-theme/REGI
+
+
+######################################################
+# File paths used to generate the catalog export RDF #
+######################################################
+
+rdf.export.folder.path = FULL_RDF_EXPORT_FOLDER_PATH
+# File path that stores the complete catalog
+rdf.export.filepath = %(rdf.export.folder.path)s/CATALOG_RDF_EXPORT_FILENAME
+# File path that stores the complete catalog to harvest in Europe
+rdf.export.edp.filepath = %(rdf.export.folder.path)s/CATALOG_RDF_EXPORT_FILENAME_EDP
+# File path that stores the root catalog metadata
+rdf.export.root_catalog_template.filepath = %(rdf.export.folder.path)s/datosgobes_root_catalog.rdf
+# File path that stores the internal catalog metadata than contains all dataset harvesting with legacy NTI or added manually
+rdf.export.internal_subcatalog_template.filepath = %(rdf.export.folder.path)s/datosgobes_internal_subcatalog.rdf
+# File path that stores the metadata of all harvestng subcatalogs and that are stored in a rdf database
+rdf.export.subcatalogs.filepath = %(rdf.export.folder.path)s/subcatalogs.xml
+# File path that stores the metadata of all datasets and dataservices
+rdf.export.datasets_dataservices.filepath = %(rdf.export.folder.path)s/datasets_dataservices.xml
+# File path that stores the metadata of the rest of entities (distributions, agents, periods of time, ...)
+rdf.export.metadata.filepath = %(rdf.export.folder.path)s/metadata.xml
+
+rdf.export.edp.chars = ;
+
+#######################################################
+# Properties to generate the metadata of root catalog #
+#######################################################
+# Catalog uri (rdf:about property). Optional
+rdf.export.catalog.uriref = http://datos.gob.es
+
+# Catalog home page (foaf:homepage property). Mandatory
+rdf.export.catalog.homepage = http://datos.gob.es
+
+# Catalog title (dct:title property). Mandatory at least without language
+rdf.export.catalog.title = datos.gob.es
+#rdf.export.catalog.title_en =
+#rdf.export.catalog.title_es =
+#rdf.export.catalog.title_gl = 
+#rdf.export.catalog.title_eu =
+#rdf.export.catalog.title_ca =
+
+# Catalog description (dct:description property). Mandatory at least without language
+rdf.export.catalog.description = El catálogo de datos permite acceder, desde un único punto, a los distintos sitios web y recursos del sector público español que ofrecen información pública reutilizable. Los datos están a disposición de los usuarios organizados y estructurados por formatos y temas, entre otros criterios.
+rdf.export.catalog.description_es = El catálogo de datos permite acceder, desde un único punto, a los distintos sitios web y recursos del sector público español que ofrecen información pública reutilizable. Los datos están a disposición de los usuarios organizados y estructurados por formatos y temas, entre otros criterios.
+#rdf.export.catalog.description_en = 
+#rdf.export.catalog.description_gl =
+#rdf.export.catalog.description_ca =
+#rdf.export.catalog.description_eu =
+
+# List of catalog theme taxonomies URIs separated by commas (dcat:themeTaxonomy property). Mandatory
+rdf.export.catalog.themeTaxonomy = http://datos.gob.es/kos/sector-publico/sector,http://inspire.ec.europa.eu/theme
+
+# List of catalog spatial coverage URIs separated by commas (dct:spatial property). Mandatory
+rdf.export.catalog.spatial = http://datos.gob.es/recurso/sector-publico/territorio/Pais/España
+
+# List of catalog authors separated by different lines. Each author has <author_uri>|<author_name>|<author_identifier> (dcat:creator property). Mandatory
+# If author_uri is a uri of datos.gob organization taxonomies, name or identifier will be ignored
+rdf.export.catalog.creator = http://datos.gob.es/recurso/sector-publico/org/Organismo/E05068901||
+#							 https://datos.gob.es/catalog/autor/persona-001|Nombre y apellidos de la persona 001|NIF persona 001
+#							 https://datos.gob.es/catalog/autor/organizacion-001|Nombre de la organización 001|DIR3 o CIF de la organización 001
+
+# Catalog rights web page (dct:rights property). Optional
+rdf.export.catalog.rights = http://datos.gob.es/declaracion-derechos
+
+# Catalog license web page (dct:license property). Mandatory
+rdf.export.catalog.license = http://datos.gob.es/aviso-legal
+
+# Catalog publisher URI. It must be a URI of datos.gob organization taxonomy (dct:publisher property). Mandatory
+rdf.export.catalog.publisher = http://datos.gob.es/recurso/sector-publico/org/Organismo/E05068901
+
+# Catalog creation date (dct:issued property). Mandatory
+rdf.export.catalog.issued = 2011-10-24
+
+##################################################################################################################
+# Properties to generate the metadata of internal catalog (dataset harvesting with legacy NTI or added manually) #
+##################################################################################################################
+# Catalog uri (rdf:about property). Mandatory
+rdf.export.subcatalog.uriref = http://datos.gob.es/subcatalog
+
+# Catalog home page (foaf:homepage property). Mandatory
+rdf.export.subcatalog.homepage = %(rdf.export.catalog.homepage)s
+
+# Catalog title (dct:title property). Mandatory at least without language
+rdf.export.subcatalog.title = subcatalog.datos.gob.es
+
+# Catalog description (dct:description property). Mandatory at least without language
+rdf.export.subcatalog.description = El subcatálogo de datos de datos.gob.
+
+# List of catalog theme taxonomies URIs separated by commas (dcat:themeTaxonomy property). Mandatory
+rdf.export.subcatalog.themeTaxonomy =  %(rdf.export.catalog.themeTaxonomy)s
+
+# List of catalog spatial coverage URIs separated by commas (dct:spatial property). Mandatory
+rdf.export.subcatalog.spatial =  %(rdf.export.catalog.spatial)s
+
+# List of catalog authors separated by different lines. Each author has <author_uri>|<author_name>|<author_identifier> (dcat:creator property). Mandatory
+# If author_uri is a uri of datos.gob organization taxonomies, name or identifier will be ignored
+rdf.export.subcatalog.creator =  %(rdf.export.catalog.creator)s
+
+# Catalog rights web page (dct:rights property). Optional
+rdf.export.subcatalog.rights =  %(rdf.export.catalog.rights)s
+
+# Catalog license web page (dct:license property). Mandatory
+rdf.export.subcatalog.license =  %(rdf.export.catalog.license)s
+
+# Catalog publisher URI. It must be a URI of datos.gob organization taxonomy (dct:publisher property). Mandatory
+rdf.export.subcatalog.publisher =  %(rdf.export.catalog.publisher)s
+
+# Catalog creation date (dct:issued property). Mandatory
+rdf.export.subcatalog.issued =  %(rdf.export.catalog.issued)s
+
+
+[csv.export]
+# This section contains properties used to export the catalog in CSV.
+# Filepath of files used to export catalog CSV
+csv.export.columns.filepath = /var/lib/ckan/default/src/ckanext-dge-harvest/ckanext/dge_harvest/commands/columns.json
+csv.export.filepath = FULL_CSV_EXPORT_FILE_PATH/datosgobes.csv

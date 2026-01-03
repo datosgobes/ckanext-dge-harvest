@@ -1,6 +1,6 @@
-# Copyright (C) 2022 Entidad Pública Empresarial Red.es
+# Copyright (C) 2025 Entidad Pública Empresarial Red.es
 #
-# This file is part of "dge_harvest (datos.gob.es)".
+# This file is part of "dge-harvest (datos.gob.es)".
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -9,7 +9,7 @@
 #
 # This program is distributed in the hope that it will be useful,
 # but WITHOUT ANY WARRANTY; without even the implied warranty of
-# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
 # GNU General Public License for more details.
 #
 # You should have received a copy of the GNU General Public License
@@ -17,22 +17,22 @@
 
 import ckanext.dge_scheming.helpers as dsh
 import ckanext.scheming.helpers as sh
-from ckan.lib.helpers import get_available_locales
-from pylons.i18n import gettext
-from pylons import config
+from ckan.plugins.toolkit import config
+from ckan.lib.i18n import get_available_locales
 import pytz
 import datetime
-import ckan.logic as logic
+import time
 import ckan.lib.helpers as h
-import ckanext.dge_harvest.constants as dhc
+from  .constants.constants import ConfigConstants
 from ckan import model
 from ckan.common import (
-    _, ungettext, g, c, request, session, json, OrderedDict
+    _, ungettext, g, c, request, session, json
 )
-
+import ckan.plugins.toolkit as tk
+from .vocabulary_utils import dge_harvest_get_vocabulary_element_labels
+from .decorators import log_info, log_debug
 
 import logging
-from rdflib.plugins.parsers.pyRdfa import options
 
 log = logging.getLogger(__name__)
 
@@ -43,10 +43,22 @@ def _dge_harvest_list_dataset_field_values(name_field=None):
     result = []
     if name_field is not None:
         dataset = sh.scheming_get_schema('dataset', 'dataset')
-        values = sh.scheming_field_by_name(dataset.get('dataset_fields'),
-                name_field) or []
+        values = sh.scheming_field_by_name(dataset.get('dataset_fields'), name_field) or []
         if values and values['choices']:
             for option in values['choices']:
+                if option and option['value']:
+                    result.append(option['value'])
+    return result
+
+def _dge_harvest_list_nti_field_values(name_field=None):
+    '''
+    Returns the available values that the given dataset name_field may have
+    '''
+    result = []
+    if name_field is not None:
+        values = dsh.dge_get_nti_field_choices(name_field) or []
+        if values:
+            for option in values:
                 if option and option['value']:
                     result.append(option['value'])
     return result
@@ -57,17 +69,13 @@ def _dge_harvest_list_dataset_field_labels(name_field=None, value_field=None):
     '''
     result = {}
     if name_field is not None:
-        dataset = sh.scheming_get_schema('dataset', 'dataset')
-        values = sh.scheming_field_by_name(dataset.get('dataset_fields'),
-                name_field) or []
-        if values and values['choices']:
-            for option in values['choices']:
-                if option and option['value']:
-                    if value_field:
-                        if option['value'] == value_field:
-                            return {option.get('value'): {'label' : option.get('label'), 'description': option.get('description'), 'dcat_ap': option.get('dcat_ap'), 'notation': option.get('notation')}}
-                    else:
-                        result[option.get('value')] = {'label' : option.get('label'), 'description': option.get('description'), 'dcat_ap': option.get('dcat_ap'), 'notation': option.get('notation')}
+        choices = dsh.dge_get_nti_field_choices(name_field)
+        log.info(f'choices = {choices}')
+        for option in choices or []:
+            if value_field and option['value'] == value_field:
+                return {option.get('value'): {'label' : option.get('label'), 'description': option.get('description'), 'dcat_ap': option.get('dcat_ap'), 'notation': option.get('notation')}}
+            else:
+                result[option.get('value')] = {'label' : option.get('label'), 'description': option.get('description'), 'dcat_ap': option.get('dcat_ap'), 'notation': option.get('notation')}
     return result
 
 
@@ -90,9 +98,14 @@ def dge_harvest_list_spatial_coverage_option_value():
     '''
     Returns available values for spatial coverage 
     '''
-    list = _dge_harvest_list_dataset_field_values('spatial')
+    spatial_list = []
+    values = dsh.dge_get_nti_field_choices('spatial') or []
+    if values and len(values) > 0:
+        for option in values:
+            if option and option['value']:
+                spatial_list.append(option['value'])
     result = {}
-    for item in list:
+    for item in spatial_list:
         if item:
             result[item.lower()] = item
     return result
@@ -101,14 +114,22 @@ def dge_harvest_dict_spatial_coverage_option_label(value=None):
     '''
     Returns available label for spatial coverage 
     '''
-    result = _dge_harvest_list_dataset_field_labels('spatial', value)
+    result = {}
+    values = dsh.dge_get_nti_field_choices('spatial') or []
+    if values and len(values) > 0:
+        for option in values:
+            if option and option['value']:
+                if value and option['value'] == value:
+                    return {option.get('value'): {'label' : option.get('label')}}
+                else:
+                    result[option.get('value')] = {'label' : option.get('label')}
     return result
 
 def dge_harvest_list_theme_option_value():
     '''
     Returns available values for theme 
     '''
-    list = _dge_harvest_list_dataset_field_values('theme')
+    list = _dge_harvest_list_nti_field_values('theme')
     result = {}
     for item in list:
         if item:
@@ -145,43 +166,55 @@ def dge_harvest_is_uri(uri):
     '''
     return dsh.dge_is_uri(uri)
 
+def _get_extra_value(extras, key):
+    value = None
+    if key is None:
+        return None
+    for extra in extras or []:
+        if extra.get('key', '') == key:
+            value = extra.get('value', None)
+            if value:
+                break
+            else:
+                log.debug(f'Key {key} has not value')
+                break
+    return value
+
+
 def dge_harvest_organizations_available():
-    '''Return a dict of active organizations 
-        where key id id_minhap (extra C_ID_UD_ORGANICA value) 
+    '''
+    Get a dictionary of active organizations
+    
+    :returns a dict of active organizations where key is id_minhap (extra C_ID_UD_ORGANICA value) and value is a list [<org_id>, <org_name>] 
         and value is org_id
     '''
+    log.info('[dge_harvest_organizations_available] Init method')
+    ini = time.time()
     idminhap_organizations = {}
-    context = {'ignore_auth': False}
-    data_dict = {'all_fields': True,
-                 'include_extras': True}
-    organizations = logic.get_action('organization_list')(context, data_dict)
-    if organizations:
-        idminhap_organizations = {}
-        idminhap_dis_name = {}
-        for organization in organizations:
-            if organization and organization.get('id', None):
-                organization_id = organization.get('id', None)
-                organization_name = organization.get('title', None)
-                if not organization_name or len(organization_name) == 0:
-                    organization_name=organization.get('display_name', '')
-                extras = organization.get('extras')
-                if organization_id and extras:
-                    found = False
-                    for extra in extras:
-                        if extra and not found:
-                            if extra.get('key') == dhc.ORG_PROP_ID_UD_ORGANICA:
-                                found = True
-                                if extra.get('value'):
-                                    value = extra.get('value').upper()
-                                    if (value not in idminhap_organizations):
-                                        idminhap_organizations[value] = [organization_id, organization_name]
-                                    else:
-                                        #log.info("Organization %s[id=%s], the publisher %s is used by other organization whose id is %s" %(organization.get('name'), organization.get('id'), value, idminhap_organizations.get('value')[0]))
-                                        log.info("Organization is used by other organization ")
-                                break
-                    if  not found:
-                        log.info("Organization %s[id=%s] has not an extra extra %s or its value is empty" % (organization.get('name'), organization.get('id'), dhc.ORG_PROP_ID_UD_ORGANICA))
-                else:
-                    log.info("Organization %s[id=%s] has not extras" % (organization.get('name'), organization.get('id')))
-    #log.debug("idminhap_organizations=%s", idminhap_organizations)
+    context = {'ignore_auth': True}
+    data_dict = {'all_fields': True, 'include_dataset_count': False, 'include_extras':True}
+    organizations = tk.get_action('organization_list')(context, data_dict)
+    for organization in organizations or []:
+        organization_id = organization.get('id', None)
+        organization_name = organization.get('title', None) or organization.get('display_name', '')
+        extras = organization.get('extras')
+        if organization_id and extras:
+            value = _get_extra_value(extras, ConfigConstants.ORG_PROP_ID_UD_ORGANICA)
+            if value and value not in idminhap_organizations:
+                idminhap_organizations[value] = [organization_id, organization_name]
+    log.info(f'[dge_harvest_organizations_available] End method in {time.time() - ini}')
     return idminhap_organizations
+
+def dge_get_organization(org=None, include_datasets=False):
+    context = {'model': model, 'session': model.Session, 'ignore_auth': True}
+    admin_user = tk.get_action('get_site_user')(context, {})
+    if org is None:
+        return {}
+    try:
+        return tk.get_action('organization_show')(
+            {'user': admin_user['name']}, {'id': org, 'include_datasets': include_datasets})
+    except (logic.NotFound, logic.ValidationError, logic.NotAuthorized):
+        return {}
+
+def dge_harvest_get_vocabulary_element_label_dict(uri_element):
+    return dge_harvest_get_vocabulary_element_labels(uri_element)
