@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -55,6 +55,10 @@ class DGENTIRDFHarvester(DGERDFHarvester):
             log.info('%s End method 0. The gathering stage took more than 2 hours, and the harvest job was renewed before it was finished. Returns: []' % (method_log_prefix))
             return []
 
+        # Refreshing source info
+        model.Session.refresh(harvest_job.source)
+
+        # Get rdf_format and default_catalog_language in source_config
         rdf_format, default_catalog_language = self._get_rdf_format_config(harvest_job.source.config)
 
         # Get file contents of first page

@@ -6,3 +6,4 @@ rfc3987
 pyshacl==0.27.0 #pyshacl requires rdflib >=6.3.2 and < 8.0
 SPARQLWrapper==2.0.0
 treelib==1.7.0
+shapely==2.0.7

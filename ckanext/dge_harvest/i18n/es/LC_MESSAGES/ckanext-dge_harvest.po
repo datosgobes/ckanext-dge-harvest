@@ -1,5 +1,5 @@
 # Spanish translations for ckanext-dge-harvest.
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -599,3 +599,56 @@ msgstr "Frecuencia"
 #: /ckanext/dge_harvest/templates/source/admin_base.html:25
 msgid "Stop"
 msgstr "Parar"
+
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "cyclic reference detected"
+msgstr "detectada referencia cíclica"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "Message"
+msgstr "Mensaje"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "Focus Node"
+msgstr "Nodo afectado"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "Property"
+msgstr "Propiedad"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "Value"
+msgstr "Valor"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "Constraint"
+msgstr "Restricción"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "Shape Definition"
+msgstr "Definición del Shape"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "no local properties"
+msgstr "sin propiedades locales"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "Detail"
+msgstr "Detalle"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "See more info at"
+msgstr "Ver más información en"
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "SHACL ERROR"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "SHACL WARNING"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
+msgid "SHACL INFO"
+msgstr ""

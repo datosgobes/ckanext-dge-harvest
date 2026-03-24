@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -214,7 +214,7 @@ def update_catalog_metadata_in_source_graph(root_catalog, job_graph_name, source
     rdf_store = RDFStoreComplete(job_graph_name)
     # get catalog data from root_catalog in job_graph
     exclude_predicates = [URIRef(DCAT.record), URIRef(DCAT.service), URIRef(DCAT.dataset)]
-    root_catalog_graph = rdf_store.rdf_store_query.get_customized_node(root_catalog, exclude_predicates, [], [])
+    root_catalog_graph = rdf_store.rdf_store_query.get_customized_node(root_catalog, exclude_predicates, [], [], normalize_node=True)
     # update subject in triples
     for s,p,o in root_catalog_graph:
         if s == URIRef(root_catalog):

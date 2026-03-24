@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -323,26 +323,26 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     CATALOG_STORE_ERROR_URL = '[Error al almacenar el cat\u00E1logo de la URL: {}] {}. El feed no ha sido procesado.'
     NOT_FOUND_SHACL_CONFIG_ERROR = 'Error al hacer la validation SHACL de la url {}. Faltan detalles de la configuraci\u00F3n. Póngase en contacto con un administrador.'
     
-    DELETE_UNDESCRIBED_CATALOG = "[INFO] Deleted undescribed referenced catalog {}."
-    DELETE_UNDESCRIBED_DATASET = "[INFO] Deleted undescribed referenced dataset {}."
-    DELETE_UNDESCRIBED_DATASERVICE = "[INFO] Deleted undescribed referenced dataservice {}."
-    DELETE_UNREFERENCED_DATASET_IN_CATALOG = "[INFO] Deleted references of unreferenced dataset in a catalog {}."
-    DELETE_UNREFERENCED_DATASERVICE_IN_CATALOG = "[INFO] Deleted references of unreferenced dataservice in a catalog {}."
-    DELETE_UNREFERENCED_DESCRIBED_DATASET = "[INFO] Deleted unreferenced described dataset in a catalog {}."
-    DELETE_UNREFERENCED_DESCRIBED_DATASERVICE = "[INFO] Deleted unreferenced described dataservice in a catalog {}."
-    DELETE_UNREFERENCED_NODE = "[INFO] Deleted unreferenced node {}."
-    DELETE_CATALOG_RECORD = "[INFO] Deleted references and CatalogRecord entity {}."
-    DELETE_DATASET_REFERENCE_IN_CATALOG = "[INFO] Dataset {} was referenced in multiple catalogs. To leave it referenced in only one, the references in the following catalogs have been deleted: {}."
-    DELETE_DATASERVICE_REFERENCE_IN_CATALOG = "[INFO] Dataset {} was referenced in multiple catalogs. To leave it referenced in only one, the references in the following catalogs have been deleted: {}."
-    DELETE_CATALOG = "[INFO] Deleted not conforms catalog {}."
-    DELETE_DATASERVICE = "[INFO] Deleted not conforms dataservice {}."
-    DELETE_HVD_DATASERVICE = "[INFO] Deleted not conforms HVD dataservice {}."
-    DELETE_DATASET = "[INFO] Deleted not conforms dataset {}."
-    DELETE_AGENT_DATA = "[INFO] Deleted data of the datos.gob organism {}."
-    DELETE_HVD_DATASET = "[INFO] Deleted not conforms HVD dataset {}."
-    NO_VALID_DISTRIBUTION_IN_DATASET ="[ERROR] No valid distributions in dataset {}."
-    NO_DATA_TO_HARVEST = "[INFO] No object to harvest."
-    CATALOG_WITH_ERRORS = "[ERROR] There are catalogs with errors. In order to harvest all catalogs must be valid."
+    DELETE_UNDESCRIBED_CATALOG = "[INFO] Se elimin\u00F3 un cat\u00E1logo referenciado no descrito: {}."
+    DELETE_UNDESCRIBED_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos referenciado no descrito: {}."
+    DELETE_UNDESCRIBED_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos referenciado no descrito: {}."
+    DELETE_UNREFERENCED_DATASET_IN_CATALOG = "[INFO] Se eliminaron las referencias de un conjunto de datos no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_DATASERVICE_IN_CATALOG = "[INFO] Se eliminaron las referencias de un servicio de datos no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_DESCRIBED_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos descrito pero no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_DESCRIBED_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos descrito pero no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_NODE = "[INFO] Se elimin\u00F3 un nodo no referenciado {}."
+    DELETE_CATALOG_RECORD = "[INFO] Se eliminaron las referencias y la entidad CatalogRecord {}."
+    DELETE_DATASET_REFERENCE_IN_CATALOG = "[INFO] El conjunto de datos {} estaba referenciado en varios cat\u00E1logos. Para dejarlo referenciado solo en uno, se eliminaron las referencias en los siguientes cat\u00E1logos: {}."
+    DELETE_DATASERVICE_REFERENCE_IN_CATALOG = "[INFO] El conjunto de datos {} estaba referenciado en varios cat\u00E1logos. Para dejarlo referenciado solo en uno, se eliminaron las referencias en los siguientes cat\u00E1logos: {}."
+    DELETE_CATALOG = "[INFO] Se elimin\u00F3 un cat\u00E1logo que no cumple con las especificaciones: {}."
+    DELETE_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos que no cumple con las especificaciones: {}."
+    DELETE_HVD_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos HVD que no cumple con las especificaciones: {}."
+    DELETE_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos que no cumple con las especificaciones: {}."
+    DELETE_AGENT_DATA = "[INFO] URI de la organizaci\u00F3n publicadora recuperado: {}. Los datos proporcionados en el archivo RDF no se utilizar\u00E1n y ser\u00E1n reemplazados por la informaci\u00F3n ya disponible en datos.gob.es."
+    DELETE_HVD_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos HVD que no cumple con las especificaciones: {}."
+    NO_VALID_DISTRIBUTION_IN_DATASET ="[ERROR] No hay distribuciones v\u00E1lidas en el conjunto de datos {}."
+    NO_DATA_TO_HARVEST = "[INFO] No hay objetos para federar."
+    CATALOG_WITH_ERRORS = "[ERROR] Existen cat\u00E1logos con errores. Para realizar la federaci\u00F3n, todos los cat\u00E1logos deben ser v\u00E1lidos."
     
     # profile import stage constants
     CONTACT_POINT_VCARD_CLASSES = (VCARD.Kind, VCARD.Organization, VCARD.Group, VCARD.Individual, VCARD.Location)
