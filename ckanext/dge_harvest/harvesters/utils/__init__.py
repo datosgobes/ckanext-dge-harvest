@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -27,5 +27,5 @@ from .gather_stage_validation import GatherStageValidation, GatherStageValidatio
 from . import harvester_utils
 from . import import_stage_utils
 from .rdf_validator import RdfValidator, DcatApEsRdfValidator, RdfValidatorException
-from .shacl_validator import ShaclValidator, ShaclValidatorException, ShaclValidationResult
+from .shacl_validator import ShaclValidator, ShaclValidatorException
 from .vocabulary_validator import VocabularyValidator, VocabularyValidatorException

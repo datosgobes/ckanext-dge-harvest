@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -153,7 +153,7 @@ def check_shacl_validation(data_graph:Graph, shacl_validator:ShaclValidator) -> 
     """
     Checks whether a graph conforms to given shacl validator.
 
-    :param data_graph: URI of dataset 
+    :param data_graph: URI of entity to validate
     :type data_graph: str
 
     :param shacl_validator: object that makes the shacl validation
@@ -162,7 +162,7 @@ def check_shacl_validation(data_graph:Graph, shacl_validator:ShaclValidator) -> 
     :returns: Tuple with three params: 
                 - conforms: True if data_graph is conforms, False in other case
                 - shacl_messages: List of messages in shacl validation
-    :rtype: TTuple(bool, List[str])
+    :rtype: Tuple(bool, List[str])
     """
     # check SHACL templates
     shacl_conforms, shacl_messages = shacl_validator.check_shacl_validation(data_graph)

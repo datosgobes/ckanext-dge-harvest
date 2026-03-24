@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -177,10 +177,10 @@ class VocabularyValidator():
                 # query to sparql
                 log.debug(f'{method_log_prefix} consult to .... {self.vocabulary_graph_name}')
                 if self.vocabulary_graph_name:
-                    self._check_vocabulary_element(str(vocabulary_uri), str(o), messages)
+                    self._check_vocabulary_element(str(vocabulary_uri), str(o), messages, str(p))
         return messages
 
-    def _check_vocabulary_element(self, vocabulary_uri, vocabulary_element_uri, messages):
+    def _check_vocabulary_element(self, vocabulary_uri, vocabulary_element_uri, messages, metadata_uri):
         if not messages:
             messages = []
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
@@ -195,7 +195,7 @@ class VocabularyValidator():
             if self.elements_unbelonging_to_vocabulary.get(vocabulary_uri) is None:
                 self.elements_unbelonging_to_vocabulary[vocabulary_uri] = set()
             self.elements_unbelonging_to_vocabulary[vocabulary_uri].add(vocabulary_uri)
-            messages.append(f'{vocabulary_element_uri} is not an element of {vocabulary_uri} vocabulary. It is not a valid value for {str(p)}.')
+            messages.append(f'{vocabulary_element_uri} is not an element of {vocabulary_uri} vocabulary. It is not a valid value for {metadata_uri}.')
             log.debug(f'{method_log_prefix} elements_unbelonging_to_vocabulary.... {self.elements_unbelonging_to_vocabulary}')
 
     @log_info

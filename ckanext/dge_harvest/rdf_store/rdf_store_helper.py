@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -20,7 +20,7 @@
 
 import logging
 import inspect
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 from treelib import Tree
 from treelib.exceptions import (
     NodeIDAbsentError,
@@ -29,13 +29,17 @@ from treelib.exceptions import (
 )
 from SPARQLWrapper import POST, GET,  JSON, QueryResult
 from urllib.error import HTTPError
-from rdflib import URIRef
-from ..constants.dcat_ap_es_constants import DCAT, RDF_NAMESPACE, DCT, FOAF, DcatClassNameEnum
+from rdflib import URIRef, Literal, Graph
+from ..constants.dcat_ap_es_constants import DCAT, RDF_NAMESPACE, DCT, FOAF, DcatClassNameEnum, LOCN
 from .rdf_store import RDFStore, RDFStoreException, RDFStoreInternalException
 from ..decorators import log_debug
+from shapely import wkt as _wkt
 
 log = logging.getLogger(__name__)
 class RDFStoreHelper(RDFStore):
+    WKT_LITERAL = URIRef("http://www.opengis.net/ont/geosparql#wktLiteral")
+    VIRT_GEOM = URIRef("http://www.openlinksw.com/schemas/virtrdf#Geometry")
+    
     '''
     Class that contains utils method to store and get info from graphs in virtuoso
     '''
@@ -348,3 +352,85 @@ class RDFStoreHelper(RDFStore):
             log.error(f'{method_log_prefix} An exception has occurred checking if there are entities of types {entities_types} in graph_uri={graph_uri}.')
             raise self._get_raise_exception(e)
         return result
+    
+    def normalize_geosparql_data_graph_respecting_origin(self, 
+        g: Graph,
+        predicates_to_check = [DCAT.centroid, DCAT.bbox, LOCN.geometry], 
+    ):
+        """
+        Reetiqueta a wktLiteral únicamente los objetos que:
+        - En el grafo actual aparecen como ^^virtrdf#Geometry
+        - El dtype REAL almacenado en Virtuoso sea wktLiteral
+        """
+        to_fix = []
+        for p in predicates_to_check:
+            for s, _, o in g.triples((None, p, None)):
+                result = self._normalize_geosparql_triple(s, p, o)
+                if result:
+                    to_fix.append(result)
+        # Aplicar cambios
+        for s, p, o, lex in to_fix:
+            log.info(f"[fix] Restaurando wktLiteral -> {s} {p} \"{lex}\"")
+            g.remove((s, p, o))
+            g.add((s, p, Literal(lex, datatype=self.WKT_LITERAL)))
+
+        return g
+
+    def _normalize_geosparql_triple(self, subject_iri, predicate_iri, object_value):
+        if isinstance(object_value, Literal) and object_value.datatype == self.VIRT_GEOM:
+            lex = str(object_value)
+            # Comprobar si es un literal o tiene forma de literal
+            if not isinstance(lex, str) and lex.strip()[:1].isalpha():
+                return None
+                    
+            if not self._is_valid_wkt(lex):
+                # No se cambia
+                log.debug(f"Invalid WKT  {subject_iri} {predicate_iri} \"{lex}\"^^virtrdf#Geometry")
+                return None
+
+            # Consultar el dtype real en RDFStore
+            dtype_real = self._get_real_data_type(str(subject_iri), str(predicate_iri), lex)
+            if dtype_real is None:
+                log.debug(f"Triple {subject_iri} {predicate_iri} \"{lex}\" not found")
+                return None
+
+            if dtype_real == str(self.WKT_LITERAL):
+                return (subject_iri, predicate_iri, object_value, lex)
+            else:
+                # Fue insertado con otro dtype, mantener
+                log.debug(f"Real dtype real = {dtype_real},  mantain dtype for {subject_iri} {predicate_iri}")
+        return None
+
+    def _is_valid_wkt(self, text: str) -> bool:
+        try:
+            _wkt.loads(text)
+            return True
+        except Exception:
+            return False
+
+    def _get_real_data_type(self,subject_iri: str, predicate_iri: str, lexical: str) -> Optional[str]:
+        """
+        Devuelve el datatype IRI almacenado en Virtuoso para (s,p,o) dentro del grafo actual,
+        o None si no se encuentra.
+        Se ejecuta vía SPARQL, sin pasar por el serializer HTTP..
+        """
+        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
+        graph_uri = self.get_graph_uri_to_query()
+        query = None
+        try:
+            if not (subject_iri and predicate_iri and lexical):
+                log.warning(f"{method_log_prefix} Parámetros insuficientes para obtener el datatype.")
+                return None
+            query = f"SELECT ?o (datatype(?o) AS ?dtype) FROM {graph_uri} WHERE {{ {self._get_uriref_to_query(subject_iri)} {self._get_uriref_to_query(predicate_iri)} ?o . FILTER(STR(?o) = '{lexical}') }}"
+            results = self._set_execute_and_convert_sparql_query_to_virtuoso(query=query, method=GET, return_format=JSON)
+            if "results" in results and results["results"]["bindings"]:
+                for binding in results["results"]["bindings"]:
+                    dtype = binding.get("dtype", {}).get("value")
+                    if dtype:
+                        log.info(f"{method_log_prefix} datatype encontrado: {dtype}")
+                        return dtype
+            log.info(f"{method_log_prefix} No se encontró datatype para {subject_iri} {predicate_iri}")
+            return None
+        except (RDFStoreInternalException) as e:
+            log.error(f'{method_log_prefix} An exception has occurred checking the real dataype of ({subject_iri}, {predicate_iri}, {lexical}) in graph_uri={graph_uri}.')
+            raise self._get_raise_exception(e)

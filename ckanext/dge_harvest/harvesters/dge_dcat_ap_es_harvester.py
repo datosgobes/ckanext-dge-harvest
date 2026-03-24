@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -317,6 +317,11 @@ class DGEDCATAPESRDFHarvester(DGERDFHarvester):
             return []
         
         parser = DGEDCATAPESRDFParser(profiles=[HarvesterConstants.HARVESTER_PROFILE])
+        
+        # Refreshing source info
+        model.Session.refresh(harvest_job.source)
+        
+        # Get rdf_format and default_catalog_language in source_config
         rdf_format, _default_catalog_language = self._get_rdf_format_config(harvest_job.source.config)
 
         guids_in_source = []

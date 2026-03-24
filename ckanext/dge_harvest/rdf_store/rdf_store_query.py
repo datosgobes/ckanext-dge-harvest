@@ -1,4 +1,4 @@
-# Copyright (C) 2025 Entidad Pública Empresarial Red.es
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
 #
 # This file is part of "dge-harvest (datos.gob.es)".
 #
@@ -107,6 +107,9 @@ class RDFStoreQuery(RDFStoreHelper):
                 if result_graph:
                     for s, p, o in result_graph:
                         node_graph.add((s, p, o))
+            if normalize_node:
+                node_graph = self.normalize_geosparql_data_graph_respecting_origin(node_graph)
+            
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting data of {node_uri} from graph {graph_uri}. {type(e).__name__}: {str(e)}')
             raise self._get_raise_exception(e)
