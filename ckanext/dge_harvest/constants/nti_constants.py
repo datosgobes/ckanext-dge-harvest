@@ -77,6 +77,8 @@ class NTIDatasetConstants(DatasetConstants):
     KEY_DATASET_LICENSE = 'license_id'
     KEY_DATASET_VALID = 'valid'
     KEY_DATASET_REFERENCE = 'reference'
+    KEY_DATASET_VISIBILIDAD = 'visibilidad'
+    VALUE_DATASET_VISIBILIDAD = 'publico'
     
     KEY_DATASET_RESOURCE_LICENSE = 'resource_license'
     KEY_DATASET_RESOURCE_MEDIATYPE = 'media_type'

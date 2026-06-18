@@ -1034,6 +1034,9 @@ class DGENTIProfile(DGEProfile):
                     if conformsToList and len(conformsToList) > 0:
                         dataset_dict[NTIDatasetConstants.KEY_DATASET_NORMATIVE] = conformsToList
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.conformsTo...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_NORMATIVE, 'None')}")
+
+                # Visibilidad (New extra associated to package field private. It must be 'publico' in harvested datasets)
+                dataset_dict[NTIDatasetConstants.KEY_DATASET_VISIBILIDAD] = NTIDatasetConstants.VALUE_DATASET_VISIBILIDAD
                 
                 # Distributions/Resources (dct:distribution) - required, multiple
                 log.debug(f"{method_log_prefix} Parsing dataset DCAT.distribution...")
@@ -1083,6 +1086,7 @@ class DGENTIProfile(DGEProfile):
                             if not self._check_empty_field(durl, actual_field, isCatalog, True, False, prefix_msg):
                                 if dhh.dge_harvest_is_url(durl):
                                     resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_ACCESS_URL] = durl
+                                    resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_EXTRA_ACCESS_URL] = [durl]
                                     log.debug(f"{durl} Ascii code distribution DCAT.accesURL...")
                                 else:
                                     self._add_errormsg(NTIHarvesterConstants.WRONG_URL.format(
@@ -1107,6 +1111,7 @@ class DGENTIProfile(DGEProfile):
                             if final_value:
                                 resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_MIMETYPE] = final_value
                                 resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_FORMAT] = final_value
+                                resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_MEDIATYPE] = NTIPrefixConstants.FORMAT_PREFIX_EDP_IANA + final_value
                                 if imt != final_value:
                                     self._add_warningmsg(NTIHarvesterConstants.FORMAT_NO_CASE_SENSITIVE.format(actual_field, imt), isCatalog,
                                                          prefix_msg)

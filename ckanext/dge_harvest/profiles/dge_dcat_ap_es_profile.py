@@ -42,6 +42,8 @@ from .base_profile_parse_utils_base import BaseProfileParseUtilsBase
 from ..harvester_config_reader import HarvesterConfigReader
 from ..constants.dcat_ap_es_constants import (NAMESPACES, DCT, DCAT, DCATAP, FOAF, RDF_NAMESPACE, ADMS, TIME, XSD, RDFS, SCHEMA, PROV, ODRL, SPDX, SKOS_NAMESPACE)
 from ..decorators import log_debug, log_info
+from .. import helpers as dhh
+from ..vocabulary_utils import dge_harvest_get_vocabulary_element_labels
 
 BASIC_FIELDS_METADATA = [
     ('homepage', FOAF.homepage),
@@ -84,6 +86,7 @@ class DGEDCATAPESProfile(DGEProfile):
         self.locales_offered = self._get_ckan_locales_offered()
         self.dcat_ap_default_locale =  self._from_iso_6391_to_language_DCAT_AP(self._get_ckan_default_locale())
         self.dcat_ap_offered_locales = self._get_dcat_ap_offered_locales()
+        self.available_resource_formats = dhh._dge_harvest_list_format_option_value() if dataset_type == 'dataset' else None
         self.parse_utils = None
         self.parse_dataset_error_message = None
         self.parse_dataservice_error_message = None
@@ -163,7 +166,7 @@ class DGEDCATAPESProfile(DGEProfile):
 
             # Author (dct:creator) Optional, multiple
             metadata = DCT.creator
-            self._add_to_dictionary_if_value_not_empty(catalog_dict, CatalogConstants.KEY_CATALOG_CREATOR, self.parse_utils._get_creators(catalog_ref, metadata), False)
+            self._add_to_dictionary_if_value_not_empty(catalog_dict, CatalogConstants.KEY_CATALOG_CREATOR, self.parse_utils._get_creators(catalog_ref, metadata, allowed_publishers), False)
 
             # Includes (dct:hasPart) optional, multiple
             metadata = DCT.hasPart
@@ -229,6 +232,10 @@ class DGEDCATAPESProfile(DGEProfile):
             title_dict = self.parse_utils.object_value_multilanguage_literal_dictionary(dataset_ref, metadata)
             self._add_to_dictionary_if_value_not_empty(dataset_dict, DatasetConstants.KEY_DATASET_TITLE_TRANSLATED, title_dict, False)
             self._add_to_dictionary_if_value_not_empty(dataset_dict, DatasetConstants.KEY_TITLE,  title_dict.get(self.default_locale, None), False)
+
+            # Visibilidad (New extra associated to package field private. It must be 'publico' in harvested datasets)
+            self._add_to_dictionary_if_value_not_empty(dataset_dict, DatasetConstants.KEY_VISIBILIDAD, DatasetConstants.VALUE_VISIBILIDAD, False)
+
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)}"
             log.error(f'{method_log_prefix} Exception parsing dataset {dataset_ref}. {error_msg}.', exc_info=True)
@@ -241,6 +248,8 @@ class DGEDCATAPESProfile(DGEProfile):
     def _parse_complete_dataset_data(self, dataset_dict, dataset_ref):
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         try:
+            allowed_publishers = self._get_available_organizations(dataset_dict)
+
             # Language (dct:language) optional, multiple
             metadata = DCT.language
             self._add_to_dictionary_if_value_not_empty(dataset_dict, DatasetConstants.KEY_DATASET_LANGUAGE, self.parse_utils.object_uriref_value_list(dataset_ref, metadata), False)
@@ -295,7 +304,7 @@ class DGEDCATAPESProfile(DGEProfile):
 
             # Author (dct:creator) optional, multiple
             metadata = DCT.creator
-            self._add_to_dictionary_if_value_not_empty(dataset_dict, DatasetConstants.KEY_DATASET_CREATOR, self.parse_utils._get_creators(dataset_ref, metadata), False)
+            self._add_to_dictionary_if_value_not_empty(dataset_dict, DatasetConstants.KEY_DATASET_CREATOR, self.parse_utils._get_creators(dataset_ref, metadata, allowed_publishers), False)
 
             # Documentation (foaf:page) optional, multiple
             metadata = FOAF.page
@@ -434,21 +443,15 @@ class DGEDCATAPESProfile(DGEProfile):
 
             # Format (dct.format) optional, single
             metadata = DCT['format']
-            dct_format = self.parse_utils._distribution_format(distribution_ref, metadata)
+            dct_format, dct_format_label = self.parse_utils._distribution_format(distribution_ref, metadata)
             self._add_to_dictionary_if_value_not_empty(resource_dict, DistributionConstants.KEY_DISTRIBUTION_RESOURCE_FORMAT, dct_format, False)
 
-            # Format (resource.format)
-            distribution_format = ''
-            if dct_format:
-                if dct_format.startswith(PrefixConstants.FORMAT_PREFIX_EDP):
-                    distribution_format = self.parse_utils._get_format_str_from_format_uri(dct_format, PrefixConstants.FORMAT_PREFIX_EDP)
-                    distribution_format = self.parse_utils._parse_format_label_to_format_value(distribution_format)
-                else:
-                    distribution_format = dct_format
-            elif media_type:
-                distribution_format = self.parse_utils._get_format_str_from_format_uri(media_type, PrefixConstants.FORMAT_PREFIX_EDP_IANA)
+            # Format (resource.format) and Mimetype (resource.mimetype)
+            distribution_format, distribution_mimetype = self._get_format_and_mimetype(dct_format, dct_format_label, media_type)
             resource_dict[DistributionConstants.KEY_DISTRIBUTION_FORMAT] = distribution_format
+            resource_dict[DistributionConstants.KEY_DISTRIBUTION_MIMETYPE] = distribution_mimetype
             self._add_to_dictionary_if_value_not_empty(resource_dict, DistributionConstants.KEY_DISTRIBUTION_FORMAT, distribution_format, False)
+            self._add_to_dictionary_if_value_not_empty(resource_dict, DistributionConstants.KEY_DISTRIBUTION_MIMETYPE, distribution_format, False)
 
             # Compress format (dcat:compressFormat) optional, single
             metadata = DCAT.compressFormat
@@ -577,6 +580,9 @@ class DGEDCATAPESProfile(DGEProfile):
             title_dict = self.parse_utils.object_value_multilanguage_literal_dictionary(dataservice_ref, metadata)
             self._add_to_dictionary_if_value_not_empty(dataservice_dict, DataserviceConstants.KEY_DATASERVICE_TITLE_TRANSLATED, title_dict, False)
             self._add_to_dictionary_if_value_not_empty(dataservice_dict, DataserviceConstants.KEY_TITLE,  title_dict.get(self.default_locale, None), False)
+
+            # Visibilidad (New extra associated to package field private. It must be 'publico' in harvested dataservices)
+            self._add_to_dictionary_if_value_not_empty(dataservice_dict, DataserviceConstants.KEY_VISIBILIDAD, DataserviceConstants.VALUE_VISIBILIDAD, False)
 
         except Exception as e:
             error_msg = f"{type(e).__name__}: {str(e)}"
@@ -1094,3 +1100,34 @@ class DGEDCATAPESProfile(DGEProfile):
                 data_dict[key] = json.dumps(value)
             else:
                 data_dict[key] = value
+
+    def _get_format_and_mimetype(self, dct_format, dct_format_label, media_type):
+        """
+        Extract and resolve the resource format and MIME type from distribution metadata.
+
+        Priority is given to `dct:format` over `dcat:mediaType`:
+
+        - If `dct:format` is a controlled vocabulary URI, its label is retrieved and used as the resource format. MIME type is left empty.
+        - If `dct:format` is an IMT value, the value is validated against the CKAN format schema; if valid, the value is used as the format and MIME type.
+        Otherwise, the label is used as the format and the value as the MIME type.
+        - If `dct:format` is not provided, `dcat:mediaType` (IANA URI) is used to derive the MIME type. The value is validated against the CKAN format schema;
+        if valid, both format and MIME type are set. Otherwise, both are left empty.
+
+        Returns:
+            tuple: (distribution_format, distribution_mimetype), which may be None if not resolved.
+        """
+        distribution_format = None
+        distribution_mimetype = None
+        if dct_format:
+            if dct_format.startswith(PrefixConstants.FORMAT_PREFIX_EDP):
+                labels = dge_harvest_get_vocabulary_element_labels(dct_format)
+                distribution_format = labels.get('en') or None
+            else:
+                distribution_format = self.available_resource_formats.get(dct_format, dct_format_label)
+                distribution_mimetype = dct_format
+        elif media_type:
+            mimetype_from_uri = self.parse_utils._get_format_str_from_format_uri(media_type, PrefixConstants.FORMAT_PREFIX_EDP_IANA)
+            if mimetype_from_uri:
+                distribution_format = self.available_resource_formats.get(mimetype_from_uri, None)
+                distribution_mimetype = distribution_format
+        return distribution_format, distribution_mimetype

@@ -279,3 +279,125 @@ def _is_geonames_vocabulary_element(vocabulary_element_uri):
 
 def _is_iana_vocabulary_element(vocabulary_element_uri):
     return vocabulary_element_uri.startswith((PrefixConstants.FORMAT_PREFIX_EDP_IANA, PrefixConstants.FORMAT_PREFIX_EDP_IANA_HTTP))
+
+def dge_harvest_get_vocabulary_elements_without_labels(vocabulary_uri:str, havester_config_file_path:str=None) -> list[str]:
+    """
+    Retrieve the labels (prefLabel) of a vocabulary element from the RDF graph.
+
+    If the labels are not already stored in the graph, they are fetched from the vocabulary element's URI
+    and inserted into the graph.
+
+    :param vocabulary_uri: The URI of the vocabulary whose terms are to be retrieved.
+    :type vocabulary_uri: str
+    :param havester_config_file_path: Path to the harvester configuration file. If not provided, it will use
+                                      the default configuration path from the CKAN configuration.
+    :type havester_config_file_path: str, optional
+    
+    :return: A list of term URIs that have no label stored in Virtuoso
+    :rtype: list[str]
+    """
+    method_log_prefix = f'[{inspect.currentframe().f_code.co_name}]'
+    terms = []
+    graph_name = None
+    try:
+        graph_name = _get_graph_name(havester_config_file_path)
+        log.info(f"{method_log_prefix} Terms are going to be got from {graph_name}")
+        rdf_store = RDFStoreQuery(graph_name)
+        if not rdf_store or not vocabulary_uri:
+            return terms
+        query = f"SELECT ?s WHERE {{ GRAPH {safe_n3_uriref(graph_name)} {{ ?s {safe_n3_uriref(SKOS_NAMESPACE.inScheme)} {safe_n3_uriref(vocabulary_uri)} . FILTER NOT EXISTS {{ ?s {safe_n3_uriref(SKOS_NAMESPACE.prefLabel)} ?l }} }} }}"
+
+        results = rdf_store._get_results_by_query(query)
+        for result in results or []:
+            _type = result['s'].get('type', None)
+            _value = result['s'].get('value', None)
+            if _type and _type == 'uri' and _value:
+                terms.append(_value)
+        log.info(f"{method_log_prefix} Terms without label = {terms}")
+    except Exception as e:
+        log.error(f"{method_log_prefix} Exception getting labels of {vocabulary_uri} from graph {graph_name or ''} {type(e)}: {str(e)}", exc_info=True)
+        terms = None
+    return terms
+
+def dge_harvest_insert_format_element_labels(format_element_uri:str, havester_config_file_path:str=None):
+    """
+    Fetch and insert the labels (prefLabel) of a format element into the RDF graph.
+
+    This method retrieves the labels from the format element's URI, filters them based on the offered
+    languages configured in CKAN, and inserts the valid labels into the RDF graph.
+
+    :param format_element_uri: The URI of the format element whose labels are to be fetched and inserted.
+    :type format_element_uri: str
+    :param havester_config_file_path: Path to the harvester configuration file. If not provided, it will use
+                                      the default configuration path from the CKAN configuration.
+    :type havester_config_file_path: str, optional
+    :return: A dictionary where the keys are language codes (e.g., "en", "es") and the values are the labels
+             in those languages.
+    :rtype: dict[str, str]
+    """
+    method_log_prefix = f'[{inspect.currentframe().f_code.co_name}]'
+    labels = {}
+    try:
+        offered_languages = config.get('ckan.locales_offered', '').split()
+        if not format_element_uri or not offered_languages:
+            return labels
+        element_uris = [format_element_uri]
+        predicate = SKOS_NAMESPACE.prefLabel
+        graph_name = _get_graph_name(havester_config_file_path)
+        rdf_store = RDFStoreInsertOrUpdate(graph_name)
+        labels = _dge_harvest_get_and_insert_labels(element_uris, format_element_uri, predicate, offered_languages, graph_name, rdf_store)
+    except Exception as e:
+        log.error(f'{method_log_prefix} Exception adding labels of {format_element_uri} in graph {graph_name or ""} {type(e)}: {str(e)}', exc_info=True)
+        labels = None
+    return labels
+
+def dge_harvest_get_format_uris_and_labels(vocabulary_uri:str, havester_config_file_path:str=None) -> list[dict[str, dict[str, str]]]:
+    """
+    Retrieve all the URIs and labels (prefLabel) of format vocabulary elements from the RDF graph.
+
+    :param vocabulary_uri: The URI of the vocabulary whose format URIs and labels are to be retrieved.
+    :type vocabulary_uri: str
+    :param havester_config_file_path: Path to the harvester configuration file. If not provided, it will use
+                                      the default configuration path from the CKAN configuration.
+    :type havester_config_file_path: str, optional
+    
+    :return: A list of dict with format URIs and their labels stored in Virtuoso
+    :rtype: list[dict[str, dict[str, str]]]
+    """
+    method_log_prefix = f'[{inspect.currentframe().f_code.co_name}]'
+    format_uris_labels = {}
+    format_uris_labels_list = []
+    graph_name = None
+    try:
+        graph_name = _get_graph_name(havester_config_file_path)
+        log.info(f"{method_log_prefix} Terms are going to be got from {graph_name}")
+        rdf_store = RDFStoreQuery(graph_name)
+        if not rdf_store or not vocabulary_uri:
+            return format_uris_labels_list
+        query = f"SELECT ?s ?o WHERE {{ GRAPH {safe_n3_uriref(graph_name)} {{ ?s {safe_n3_uriref(SKOS_NAMESPACE.inScheme)} {safe_n3_uriref(vocabulary_uri)} . ?s {safe_n3_uriref(SKOS_NAMESPACE.prefLabel)} ?o }} }}"
+
+        results = rdf_store._get_results_by_query(query)
+        for result in results or []:
+            s = result.get("s", {})
+            o = result.get("o", {})
+
+            if not s.get('type') or s.get('type') != 'uri':
+                continue
+            if not o.get('type') or o.get('type') != 'literal':
+                continue
+            
+            uri = s.get('value', None)
+            lang = o.get('xml:lang', None)
+            label = o.get('value', None)
+
+            if not (uri and lang and label):
+                continue
+            
+            format_uris_labels.setdefault(uri, {})[lang] = label
+
+        format_uris_labels_list = [{uri: langs} for uri, langs in format_uris_labels.items()]
+        log.info(f"{method_log_prefix} Format URIs and labels = {format_uris_labels_list}")
+    except Exception as e:
+        log.error(f"{method_log_prefix} Exception getting URIs and labels of {vocabulary_uri} from graph {graph_name or ''} {type(e)}: {str(e)}", exc_info=True)
+        format_uris_labels_list = None
+    return format_uris_labels_list

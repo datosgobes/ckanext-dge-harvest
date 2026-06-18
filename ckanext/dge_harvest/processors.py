@@ -116,7 +116,176 @@ class DGENTIRDFSerializer(RDFSerializer):
     Supports different profiles which are the ones that will generate
     the RDF graph.
     '''
-  
+    """
+    def _serialize_datasets(self, catalog_ref=None, dataset_dicts=None):
+        '''
+        Returns an RDF serialization of the dataservices
+        '''
+        method_log_prefix = f'[{__name__}][_serialize_datasets]'
+        log.debug(f'{method_log_prefix} Init method')
+        dataset_number = 0
+        if dataset_dicts is None or len(dataset_dicts) == 0:
+            log.debug(f'{method_log_prefix} End method. There are no dataset to process')
+            return dataset_number
+        
+        publishers = {}
+        formats = {}
+        themes = dhh.dge_harvest_dict_theme_option_label()
+        for dataset_dict in dataset_dicts:
+            log.debug(f'{method_log_prefix} Serialize dataset with name: {dataset_dict.get("name")}')
+            #Add available resource formats in catalog and publishers
+            dataset_dict[NTIHarvesterConstants.EXPORT_AVAILABLE_RESOURCE_FORMATS] = formats
+            dataset_dict[NTIHarvesterConstants.EXPORT_AVAILABLE_PUBLISHERS] = publishers
+            dataset_dict[NTIHarvesterConstants.EXPORT_AVAILABLE_THEMES] = themes
+            dataset_ref = self.graph_from_dataset(dataset_dict)
+            publishers = dataset_dict.get(NTIHarvesterConstants.EXPORT_AVAILABLE_PUBLISHERS, {})
+            formats = dataset_dict.get(NTIHarvesterConstants.EXPORT_AVAILABLE_RESOURCE_FORMATS, {})
+            dataset_number = dataset_number+1
+            self.g.add((catalog_ref, DCAT.dataset, dataset_ref))
+        
+        log.debug(f'{method_log_prefix} End method. {dataset_number} datasets')
+        return dataset_number
+    
+    def serialize_catalog(self, catalog_dict=None, dataset_dicts=None,
+                          _format='xml', pagination_info=None):
+        '''
+        Returns an RDF serialization of the whole catalog
+
+        `catalog_dict` can contain literal values for the dcat:Catalog class
+        like `title`, `homepage`, etc. If not provided these would get default
+        values from the CKAN config (eg from `ckan.site_title`).
+
+        If passed a list of CKAN dataset dicts, these will be also serializsed
+        as part of the catalog.
+        **Note:** There is no hard limit on the number of datasets at this
+        level, this should be handled upstream.
+
+        The serialization format can be defined using the `_format` parameter.
+        It must be one of the ones supported by RDFLib, defaults to `xml`.
+
+        `pagination_info` may be a dict containing keys describing the results
+        pagination. See the `_add_pagination_triples()` method for details.
+
+        Returns a string with the serialized catalog
+        '''
+        method_log_prefix = f'[{__name__}][serialize_catalog_with_dataservices]'
+        log.debug(f'{method_log_prefix} Init method')
+
+        catalog_ref = self.graph_from_catalog(catalog_dict)
+        
+        dataset_number = self._serialize_datasets(catalog_ref, dataset_dicts)
+
+        log.debug(f'{method_log_prefix} Total datasets={dataset_number}')
+        self.g.add((catalog_ref, DCT.extent, Literal((dataset_number), datatype=XSD.nonNegativeInteger)))
+        
+        if pagination_info:
+            self._add_pagination_triples(pagination_info)
+        
+        _format = url_to_rdflib_format(_format)
+        output = self.g.serialize(format=_format)
+        log.debug(f'{method_log_prefix} End method')
+        return output
+    
+    def serialize_catalog_EDP(self, catalog_dict=None, dataset_dicts=None, _format='xml', pagination_info=None):
+        '''
+        Returns an RDF serialization of the whole catalog
+
+        `catalog_dict` can contain literal values for the dcat:Catalog class
+        like `title`, `homepage`, etc. If not provided these would get default
+        values from the CKAN config (eg from `ckan.site_title`).
+
+        If passed a list of CKAN dataset dicts, these will be also serializsed
+        as part of the catalog.
+        **Note:** There is no hard limit on the number of datasets at this
+        level, this should be handled upstream.
+
+        The serialization format can be defined using the `_format` parameter.
+        It must be one of the ones supported by RDFLib, defaults to `xml`.
+
+        `pagination_info` may be a dict containing keys describing the results
+        pagination. See the `_add_pagination_triples()` method for details.
+
+        Returns a string with the serialized catalog
+        '''
+        catalog_ref = self.graph_from_catalog_EDP(catalog_dict)
+        if dataset_dicts:
+            i = 0
+            publishers = {}
+            formats = {}
+            themes = dhh.dge_harvest_dict_theme_option_label()
+            for dataset_dict in dataset_dicts:
+                #Add available resource formats in catalog and publishers
+                dataset_dict[NTIHarvesterConstants.EXPORT_AVAILABLE_RESOURCE_FORMATS] = formats
+                dataset_dict[NTIHarvesterConstants.EXPORT_AVAILABLE_PUBLISHERS] = publishers
+                dataset_dict[NTIHarvesterConstants.EXPORT_AVAILABLE_THEMES] = themes
+                dataset_ref = self.graph_from_dataset_EDP(dataset_dict)
+                publishers = dataset_dict.get(NTIHarvesterConstants.EXPORT_AVAILABLE_PUBLISHERS, {})
+                formats = dataset_dict.get(NTIHarvesterConstants.EXPORT_AVAILABLE_RESOURCE_FORMATS, {})
+                i = i+1
+                self.g.add((catalog_ref, DCAT.dataset, dataset_ref))
+
+            log.debug("[processors] serialize_catalog Total datasets i=%s", i)
+            self.g.add((catalog_ref, DCT.extent, Literal(i, datatype=XSD.nonNegativeInteger)))
+        
+        if pagination_info:
+            self._add_pagination_triples(pagination_info)
+        _format = url_to_rdflib_format(_format)
+        output = self.g.serialize(format=_format)
+
+        return output
+
+    def graph_from_dataset(self, dataset_dict):
+        '''
+        Given a CKAN dataset dict, creates a graph using the loaded profiles
+
+        The class RDFLib graph (accessible via `serializer.g`) will be updated
+        by the loaded profiles.
+
+        Returns the reference to the dataset, which will be an rdflib URIRef.
+        '''
+        
+        dataset_ref = URIRef(dge_harvest_dataset_uri(dataset_dict))
+
+        for profile_class in self._profiles:
+            profile = profile_class(self.g, self.compatibility_mode)
+            profile.graph_from_dataset(dataset_dict, dataset_ref)
+
+        return dataset_ref
+
+    def graph_from_catalog_EDP(self, catalog_dict=None):
+        '''
+        Creates a graph for the catalog (CKAN site) using the loaded profiles
+
+        The class RDFLib graph (accessible via `serializer.g`) will be updated
+        by the loaded profiles.
+
+        Returns the reference to the catalog, which will be an rdflib URIRef.
+        '''
+
+        catalog_ref = URIRef(catalog_uri())
+
+        for profile_class in self._profiles:
+            profile = profile_class(self.g, self.compatibility_mode)
+            profile.graph_from_catalog_EDP(catalog_dict, catalog_ref)
+
+        return catalog_ref
+
+    def graph_from_dataset_EDP(self, dataset_dict):
+        '''
+        Given a CKAN dataset dict, creates a graph using the loaded profiles
+
+        The class RDFLib graph (accessible via `serializer.g`) will be updated
+        by the loaded profiles.
+
+        Returns the reference to the dataset, which will be an rdflib URIRef.
+        '''
+        dataset_ref = URIRef(dge_harvest_dataset_uri(dataset_dict))
+        for profile_class in self._profiles:
+            profile = profile_class(self.g, self.compatibility_mode)
+            profile.graph_from_dataset_EDP(dataset_dict, dataset_ref)
+
+        return dataset_ref
+    """
 
 class DGEDCATAPESRDFParser(DGENTIRDFParser):
     '''
@@ -139,13 +308,13 @@ class DGEDCATAPESRDFParser(DGENTIRDFParser):
             log.debug(f'{method_log_prefix} pagination_node = {pagination_node}')
             for o in self.g.objects(pagination_node, HYDRA.next):
                 log.debug(f'{method_log_prefix} object next = {o}')
-                if o not in visited_pages:
+                if str(o) not in visited_pages:
                     log.debug(f'{method_log_prefix} Returns next = {o}')
                     return str(o)
 
             for o in self.g.objects(pagination_node, HYDRA.nextPage):
                 log.debug(f'{method_log_prefix} object next = {o}')
-                if o not in visited_pages:
+                if str(o) not in visited_pages:
                     log.debug(f'{method_log_prefix} Returns next = {o}')
                     return str(o)
         return None

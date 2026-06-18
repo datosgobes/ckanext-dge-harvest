@@ -34,7 +34,7 @@ from ..constants.dcat_ap_es_constants import DCATAPESPrefixConstants, DCATAPESHa
 from ..constants.nti_constants import NTIHarvesterConstants
 from ..constants.constants import CommonPackageConstants
 from ..harvester_config_reader import HarvesterConfigReader, HarvesterConfigReaderException
-from ..constants.dcat_ap_es_constants import (NAMESPACES, DCT, DCAT, FOAF, RDF, ADMS, PROV, XSD_NAMESPACE, TIME, VCARD, TIME_TYPES, SKOS_NAMESPACE, SPDX, LOCN)
+from ..constants.dcat_ap_es_constants import (NAMESPACES, DCT, DCAT, FOAF, RDF, RDFS, ADMS, PROV, XSD_NAMESPACE, TIME, VCARD, TIME_TYPES, SKOS_NAMESPACE, SPDX, LOCN)
 from ._profile_utils import _get_organization_minhap_from_organization_uri, _validate_iso8601_date
 from ..decorators import log_debug, log_info
 
@@ -227,41 +227,64 @@ class DGEDCATAPESProfileParseUtilsBase():
         return coverage
     
     @log_debug
-    def _get_creators(self, subject, predicate):
+    def _get_creators(self, subject, predicate, organizations):
         '''
         Returns a list of dict for dct:creator
         (foaf:name, dct:identifier and dct:type)
-        '''
-        foaf_classes = [FOAF.Agent, FOAF.Organization, FOAF.Person]
-        
+        '''        
         creators = []
         for o in self._g.objects(subject, predicate):
-            if isinstance(o, URIRef) and any((o, RDF.type, foaf_class) in self._g for foaf_class in foaf_classes):
-                creator = self._get_creator(o)
+            if isinstance(o, URIRef):
+                creator = self._get_creator(o, organizations)
                 if creator:
                     creators.append(creator)
         return creators
 
-    def _get_creator(self, creator_value):
+    @log_debug
+    def _get_creator(self, creator_value, organizations):
         creator = {}
         if not creator_value:
             return creator
+        creator_uri = str(creator_value)
+        foaf_classes = [FOAF.Agent, FOAF.Organization, FOAF.Person]
+        has_foaf_type = any(
+          (creator_value, RDF.type, foaf_class) in self._g
+          for foaf_class in foaf_classes
+        )
         creator_identifier = ''
         creator_type = ''
         creator_name = {}
-        is_creator_name_filled = False
-        for predicate in self._g.predicates(creator_value, None):
-            if predicate == FOAF.name:
-                if not is_creator_name_filled:
-                    creator_name = self.object_value_multilanguage_literal_dictionary(creator_value, predicate)
-                    is_creator_name_filled = True
-            elif predicate == DCT.type:
-                creator_type = self.object_uriref_value(creator_value, predicate)
-            elif predicate == DCT.identifier:
-                creator_identifier = self.object_value_literal_value(creator_value, predicate)
+        creator_id = ''
+        if has_foaf_type:
+            is_creator_name_filled = False
+            for predicate in self._g.predicates(creator_value, None):
+                if predicate == FOAF.name:
+                    if not is_creator_name_filled:
+                        creator_name = self.object_value_multilanguage_literal_dictionary(creator_value, predicate)
+                        is_creator_name_filled = True
+                elif predicate == DCT.type:
+                    creator_type = self.object_uriref_value(creator_value, predicate)
+                elif predicate == DCT.identifier:
+                    creator_identifier = self.object_value_literal_value(creator_value, predicate)
+            if not creator_name:
+                return {}
             creator = {DCATAPESHarvesterConstants.CREATOR_NAME: creator_name, 
-                       DCATAPESHarvesterConstants.CREATOR_IDENTIFIER: creator_identifier, 
-                       DCATAPESHarvesterConstants.CREATOR_TYPE: creator_type}
+                    DCATAPESHarvesterConstants.CREATOR_IDENTIFIER: creator_identifier, 
+                    DCATAPESHarvesterConstants.CREATOR_TYPE: creator_type,
+                    DCATAPESHarvesterConstants.CREATOR_ORGANIZATION_ID: creator_id,
+                    DCATAPESHarvesterConstants.CREATOR_URI: ''}
+            return creator
+        creator_minhap, creator_data = _get_organization_minhap_from_organization_uri(creator_uri, organizations)
+        creator_id = creator_data[0] if creator_data and len(creator_data) > 0 else None
+        if not creator_id:
+            return {}
+        creator = {
+            DCATAPESHarvesterConstants.CREATOR_NAME: creator_name, 
+            DCATAPESHarvesterConstants.CREATOR_IDENTIFIER: creator_identifier, 
+            DCATAPESHarvesterConstants.CREATOR_TYPE: creator_type,
+            DCATAPESHarvesterConstants.CREATOR_ORGANIZATION_ID: creator_id,
+            DCATAPESHarvesterConstants.CREATOR_URI: creator_uri
+        }
         return creator
     
     @log_debug
@@ -452,32 +475,36 @@ class DGEDCATAPESProfileParseUtilsBase():
     def _distribution_format(self, distribution_ref, metadata):
         """
         Returns the URI of an element of http://publications.europa.eu/resource/authority/file-type
-        or a str
+        or a tuple (value, label)
 
         Given a reference (URIRef or BNode) to a dcat:Distribution, it will
-        try to extract the formt
+        try to extract the format
 
         Values for the format will be checked in the following order:
         1. value of dct:format if it is an instance of dct:IMT, eg:
             <dct:format>
                 <dct:IMT rdf:value="text/html" rdfs:label="HTML"/>
             </dct:format>
+            In this case, it returns a tuple (value, label).
         2. value of dct:format if it is an URIRef and is is an element of http://publications.europa.eu/resource/authority/file-type
+            In this case, it returns a tuple (uri, None).
         
-        Return None if they couldn't be found.
+        Return tuple (None, None) if they couldn't be found.
         """
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         _format = self._object(distribution_ref, metadata)
         distribution_format = None
+        distribution_format_label = None
         if _format:
             log.debug(f'{method_log_prefix} _format = {_format}')
             if isinstance(_format, (BNode, URIRef)):
                 if self._object(_format, RDF.type) == DCT.IMT:
-                    distribution_format = self._g.value(_format, default=None)
+                    distribution_format = self._g.value(_format, RDF.value, default=None)
+                    distribution_format_label = self._g.value(_format, RDFS.label, default=None)
                 elif isinstance(_format, URIRef):
                     distribution_format = _format
-        log.debug(f'{method_log_prefix} distribution_format = {distribution_format}')
-        return str(distribution_format) if distribution_format else None
+        log.debug(f'{method_log_prefix} distribution_format = {distribution_format} / distribution_format_label = {distribution_format_label or "None"}')
+        return str(distribution_format) if distribution_format else None, str(distribution_format_label) if distribution_format_label else None
     
     @log_debug
     def _parse_format_label_to_format_value(self, format_label):

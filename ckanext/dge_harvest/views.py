@@ -41,22 +41,22 @@ def delete(id):
     try:
         context = {'model': model, 'user': toolkit.c.user}
         context['clear_source'] = toolkit.request.params.get('clear', '').lower() in (u'true', u'1',)
-
-        data_dict = {'id': id}
-        log.info('Deleting harvest source: %r', data_dict)
-        p.toolkit.check_access('harvest_source_delete', context, data_dict)
-
-        p.toolkit.get_action('package_delete')(context, data_dict)
-        package_dict = p.toolkit.get_action('package_show')(context, data_dict)
-
-        context['id'] = {'id':package_dict['id']}
-        del context['model']
-        del context['session']
-
         if context.get('clear_source', False):
-            enqueue_job(tasks.harvest_source_clear_task, queue=ViewsConstants.QUEUE_DELETE_DATASETS, kwargs={"data": context})
+            data_dict = {'id': id}
+            log.info('Deleting harvest source: %r', data_dict)
+            p.toolkit.check_access('harvest_source_delete', context, data_dict)
+
+            p.toolkit.get_action('package_delete')(context, data_dict)
+            # We need the id. The name won't work.
+            package_dict = p.toolkit.get_action('package_show')(context, data_dict)
+
+            context['id'] = {'id':package_dict['id']}
+            del context['model']
+            del context['session']
+
+            enqueue_job(tasks.harvest_source_clear_task, queue=ViewsConstants.QUEUE_DELETE_DATASETS, kwargs={"data": context})            
         else:
-            enqueue_job(tasks.harvest_source_graph_clear_task, queue=ViewsConstants.QUEUE_DELETE_DATASETS, kwargs={"data": context})
+            return toolkit.abort(403, _not_auth_message())
 
         return h.redirect_to(
             h.url_for('{0}_search'.format(ViewsConstants.DATASET_TYPE_NAME)))

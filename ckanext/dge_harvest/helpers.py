@@ -17,6 +17,7 @@
 
 import ckanext.dge_scheming.helpers as dsh
 import ckanext.scheming.helpers as sh
+import ckanext.harvest.helpers as hh
 from ckan.plugins.toolkit import config
 from ckan.lib.i18n import get_available_locales
 import pytz
@@ -218,3 +219,12 @@ def dge_get_organization(org=None, include_datasets=False):
 
 def dge_harvest_get_vocabulary_element_label_dict(uri_element):
     return dge_harvest_get_vocabulary_element_labels(uri_element)
+
+def dge_harvesters_info():
+    '''
+    Returns details of the installed harvesters using predefined order.
+    '''
+    harvesters_info = {}
+    harvesters_info = hh.harvesters_info()
+    harvesters_info.sort(key=lambda x: x.get("order", 999))
+    return harvesters_info

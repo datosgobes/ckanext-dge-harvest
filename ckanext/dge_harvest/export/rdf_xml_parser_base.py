@@ -273,20 +273,25 @@ class RDFXmlParserBase:
             prefix_candidate = f"ns_{prefix_candidate}"
 
         return prefix_candidate
+
+    def _get_unique_prefix(self, prefix: str, namespace_uri: str) -> str:
+        if not prefix:
+            prefix = self.generate_prefix(namespace_uri)
+        candidate = prefix
+        suffix = 2
+        while candidate in self._get_namespaces() and self._get_namespaces().get(candidate) != namespace_uri:
+            candidate = f'{prefix}_{suffix}'
+            suffix += 1
+        return candidate
     
     def add_namespace(self, prefix:str, namespace_uri:str):
-        HTTP_SCHEMA = 'http://'
-        HTTPS_SCHEMA = 'https://'
-
         if namespace_uri:
             namespace_uri = str(namespace_uri)
-            http_namespace_uri = namespace_uri.replace(HTTPS_SCHEMA, HTTP_SCHEMA) if namespace_uri.startswith(HTTPS_SCHEMA) else namespace_uri
-            https_namespace_uri = namespace_uri.replace(HTTP_SCHEMA, HTTPS_SCHEMA) if namespace_uri.startswith(HTTP_SCHEMA) else namespace_uri
-            existent_prefix = self._get_prefix_from_namespace_uri(http_namespace_uri) or self._get_prefix_from_namespace_uri(https_namespace_uri)
+            existent_prefix = self._get_prefix_from_namespace_uri(namespace_uri)
             if not existent_prefix:
                 if not prefix or prefix.startswith('ns'):
                     prefix = self.generate_prefix(namespace_uri)
-                
+                prefix = self._get_unique_prefix(prefix, namespace_uri)
                 self._namespaces[prefix] = namespace_uri
                 self._set_namespaces()
             else:

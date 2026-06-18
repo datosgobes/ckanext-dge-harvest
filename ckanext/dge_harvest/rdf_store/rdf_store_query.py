@@ -40,6 +40,15 @@ class RDFStoreQuery(RDFStoreHelper):
     Class that contains utils method to query data from RDF store (virtuso)
     '''
 
+    def _get_namespace_from_uri(self, uri: str) -> str:
+        if not uri:
+            return None
+        if '#' in uri:
+            return uri.rsplit('#', 1)[0] + '#'
+        if '/' in uri:
+            return uri.rsplit('/', 1)[0] + '/'
+        return None
+
     @log_debug
     def get_distinct_objects_by_predicate(self, predicate_value: str) -> List[str]:
         '''
@@ -63,7 +72,41 @@ class RDFStoreQuery(RDFStoreHelper):
         log.info(f'{method_log_prefix} End method. Result = {result_uris}')
         return result_uris
 
-    def get_customized_node(self, node_uri:str, predicates_to_exclude:List[URIRef] = [], node_classes_to_exclude:List[URIRef] = [], predicates_to_include_only_their_type:List[URIRef] = {})-> ConjunctiveGraph:
+    @log_debug
+    def get_namespaces_used_in_predicates_and_types(self) -> List[str]:
+        '''
+        Get distinct namespaces used in predicates and rdf:type objects in a graph.
+
+        :return: List of namespaces
+        :rtype: List[str]
+
+        :raise RDFStoreException
+        '''
+        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
+        graph_uri = self.get_graph_uri_to_query()
+        try:
+            query = f"""
+                SELECT DISTINCT ?term
+                FROM {graph_uri}
+                WHERE {{
+                    {{ ?s ?term ?o . FILTER(isIRI(?term)) }}
+                    UNION
+                    {{ ?s {self._get_uriref_to_query(RDF_NAMESPACE.type)} ?term . FILTER(isIRI(?term)) }}
+                }}
+            """
+            used_terms = self.get_objects_by_query(query, 'term')
+            result_namespaces = sorted({
+                namespace for namespace in
+                (self._get_namespace_from_uri(term) for term in used_terms or [])
+                if namespace
+            })
+        except (RDFStoreInternalException) as e:
+            log.error(f'{method_log_prefix} An exception has occurred getting namespaces used in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e)
+        log.info(f'{method_log_prefix} End method. Result = {result_namespaces}')
+        return result_namespaces
+
+    def get_customized_node(self, node_uri:str, predicates_to_exclude:List[URIRef] = [], node_classes_to_exclude:List[URIRef] = [], predicates_to_include_only_their_type:List[URIRef] = {}, normalize_node:bool=False)-> ConjunctiveGraph:
         '''
         Get complete node from graph_uri graph, except nodes of predicate in exclude_predicates
 
