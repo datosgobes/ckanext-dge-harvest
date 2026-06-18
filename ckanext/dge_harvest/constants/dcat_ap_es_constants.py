@@ -130,7 +130,9 @@ class DCATAPESConfigConstants(ConfigConstants):
 
     PROP_SHACL_SHAPES = ".shacl.shapes"
     PROP_SHACL_SHAPES_HVD = ".shacl.shapes.hvd"
-    
+    PROP_CANONICAL_NAMESPACES = 'canonical.namespaces'
+    PROP_CANONICAL_NAMESPACES_BY_PREFIX = 'canonical.namespaces.by_prefix'
+
     PROP_EUROPEAN_THEME_TAXONOMY = 'rdf.export.european.theme.taxonomy'
     PROP_MAPPING_NTI_THEME_EUROPEAN_THEME = 'rdf.export.mapping.nti_risp_theme.european_theme'
     
@@ -225,6 +227,7 @@ class DCATAPESDistributionConstants():
     KEY_DISTRIBUTION_TITLE = 'title'
     KEY_DISTRIBUTION_TITLE_TRANSLATED = 'name_translated'
     KEY_DISTRIBUTION_FORMAT = 'format'
+    KEY_DISTRIBUTION_MIMETYPE = 'mimetype'
     KEY_DISTRIBUTION_RESOURCE_FORMAT = 'resource_format'
     KEY_DISTRIBUTION_MEDIA_TYPE = 'media_type'
     KEY_DISTRIBUTION_LICENSE = 'resource_license'
@@ -319,9 +322,12 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     SHACL_VALIDATION_ERROR = 'Error al hacer las validaciones de vocabularios y SHACL de la url {}. Error: {}'
     PRE_VALIDATION_ERROR = 'Error al hacer la validaci\u00F3n RDF de la url {}. Error: {}'
     PREPROCESSING_ERROR = 'Error al hacer el preprocesamiento del RDF de la url {}. Error: {}'
+    NAMESPACE_VALIDATION_ERROR = 'Error al validar los namespaces del RDF de la url {}. Error: {}'
     VIRTUOSO_LOAD_ERROR = 'Error en la carga de virtuoso de la url {}. Error: {}'
     CATALOG_STORE_ERROR_URL = '[Error al almacenar el cat\u00E1logo de la URL: {}] {}. El feed no ha sido procesado.'
     NOT_FOUND_SHACL_CONFIG_ERROR = 'Error al hacer la validation SHACL de la url {}. Faltan detalles de la configuraci\u00F3n. Póngase en contacto con un administrador.'
+    NOT_FOUND_ROOT_CATALOG = '[ERROR] No hay cat\u00E1logos en el RDF'
+    NON_CANONICAL_NAMESPACES_ERROR = 'Se han encontrado namespaces cuya URI no coincide con la definición oficial de DCAT-AP-ES. Namespaces usados: {}. Namespaces esperados: {}.'
     
     DELETE_UNDESCRIBED_CATALOG = "[INFO] Se elimin\u00F3 un cat\u00E1logo referenciado no descrito: {}."
     DELETE_UNDESCRIBED_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos referenciado no descrito: {}."
@@ -338,7 +344,7 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     DELETE_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos que no cumple con las especificaciones: {}."
     DELETE_HVD_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos HVD que no cumple con las especificaciones: {}."
     DELETE_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos que no cumple con las especificaciones: {}."
-    DELETE_AGENT_DATA = "[INFO] URI de la organizaci\u00F3n publicadora recuperado: {}. Los datos proporcionados en el archivo RDF no se utilizar\u00E1n y ser\u00E1n reemplazados por la informaci\u00F3n ya disponible en datos.gob.es."
+    DELETE_AGENT_DATA = "[INFO] Recuperada info de la organizaci\u00F3n: {}. Los datos proporcionados en el archivo RDF no se utilizar\u00E1n y ser\u00E1n reemplazados por la informaci\u00F3n ya disponible en datos.gob.es."
     DELETE_HVD_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos HVD que no cumple con las especificaciones: {}."
     NO_VALID_DISTRIBUTION_IN_DATASET ="[ERROR] No hay distribuciones v\u00E1lidas en el conjunto de datos {}."
     NO_DATA_TO_HARVEST = "[INFO] No hay objetos para federar."
@@ -365,6 +371,8 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     CREATOR_NAME = 'creator_name_translated'
     CREATOR_IDENTIFIER = 'creator_identifier'
     CREATOR_TYPE = 'creator_type'
+    CREATOR_ORGANIZATION_ID = 'creator_organization_id'
+    CREATOR_URI = 'creator_uri'
     
     RELATIONSHIP_HAD_ROLE = 'had_role'
     RELATIONSHIP_RELATION = 'qualified_relation_relation'

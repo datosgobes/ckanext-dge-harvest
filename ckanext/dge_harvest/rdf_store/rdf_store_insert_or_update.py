@@ -25,7 +25,8 @@ from typing import List, Dict, Set
 from SPARQLWrapper import POST, GET, JSON, QueryResult
 from SPARQLWrapper.SPARQLExceptions import SPARQLWrapperException
 from urllib.error import HTTPError
-from rdflib import Graph, URIRef
+from rdflib import Graph, URIRef, Literal
+from rdflib.namespace import XSD
 from ..constants.dcat_ap_es_constants import DCAT, RDF_NAMESPACE, DCT, HYDRA, FOAF
 from .rdf_store_helper import RDFStoreHelper
 from .rdf_store import RDFStoreException, RDFStoreInternalException, RDFStore
@@ -39,6 +40,22 @@ class RDFStoreInsertOrUpdate(RDFStoreHelper):
     '''
     def _get_prefix_bnodes(self):
         return str(self.get_graph_uri())
+
+    def _type_dct_identifier_literals(self, graph: Graph) -> Graph:
+      typed_graph = Graph()
+
+      for subject, predicate, obj in graph:
+          if (
+              predicate == DCT.identifier
+              and isinstance(obj, Literal)
+              and obj.datatype is None
+              and obj.language is None
+          ):
+              obj = Literal(str(obj), datatype=XSD.string)
+
+          typed_graph.add((subject, predicate, obj))
+
+      return typed_graph
 
     @log_debug
     def insert_rdf_data(self, rdf_data: Graph) -> QueryResult:
@@ -87,8 +104,10 @@ class RDFStoreInsertOrUpdate(RDFStoreHelper):
         batch_number = 1
         result = None
         try:
+            # type literal identifiers
+            rdf_data_with_typed_identifier = self._type_dct_identifier_literals(rdf_data)
             # replace blank nodes
-            rdf_data_without_blank_nodes = self._replace_blank_nodes(rdf_data, self._get_prefix_bnodes())
+            rdf_data_without_blank_nodes = self._replace_blank_nodes(rdf_data_with_typed_identifier, self._get_prefix_bnodes())
             encoded_data_to_insert = self._encode_uris_of_graph(rdf_data_without_blank_nodes)
             data = encoded_data_to_insert.serialize(format='nt').splitlines()
             try:

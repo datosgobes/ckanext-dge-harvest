@@ -104,6 +104,8 @@ class CommonPackageConstants:
     CONFORMS_TO_SHACL = 'conforms_to_shacl'
     KEY_TYPE_DATASET_VALUE = 'dataset'
     KEY_TYPE_DATASERVICE_VALUE = 'dataservice'
+    KEY_VISIBILIDAD = 'visibilidad'
+    VALUE_VISIBILIDAD = 'publico'
 
 class DatasetConstants(CommonPackageConstants):
     # Keys of dataset dictionary
@@ -141,7 +143,7 @@ class HarvesterConstants:
     CATALOG_DOWNLOAD_ERROR = '[Error al descargar el cat\u00E1logo] {}. El feed no ha sido procesado.'
     CATALOG_PARSER_ERROR_URL = '[Error al parsear el cat\u00E1logo en la URL: {}] {}. El feed no ha sido procesado.'
     CATALOG_PARSER_ERROR = '[Error al parsear el cat\u00E1logo dcat] {}. El feed no ha sido procesado.'
-
+    CATALOG_FILE_SOFT_LIMIT_INFO = '[INFO] El RDF federado ha sobrepasado el umbral advertido de {} MB. Es necesario paginar el fichero para evitar futuros fallos en la federaci\u00F3n al superar el tama\u00F1o soportado.'
 
     UNEXPECTED_ERROR = '{}: {}'
 

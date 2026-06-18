@@ -49,6 +49,9 @@ class DgeHarvestPlugin(plugins.SingletonPlugin, DefaultTranslation):
     plugins.implements(plugins.IBlueprint, inherit=True)
     plugins.implements(plugins.ITranslation, inherit=True)
     plugins.implements(plugins.IFacets)
+																			   
+															   
+														  
 
     # ########################### IBlueprint ####################################
     def get_blueprint(self):
@@ -100,7 +103,10 @@ class DgeHarvestPlugin(plugins.SingletonPlugin, DefaultTranslation):
             'dge_harvest_dict_theme_option_label': helpers.dge_harvest_dict_theme_option_label,
             'dge_harvest_dict_spatial_coverage_option_label': helpers.dge_harvest_dict_spatial_coverage_option_label,
             '_dge_harvest_list_nti_field_values': helpers._dge_harvest_list_nti_field_values,
-            'dge_harvest_get_vocabulary_element_label_dict': helpers.dge_harvest_get_vocabulary_element_label_dict
+            'dge_harvest_get_vocabulary_element_label_dict': helpers.dge_harvest_get_vocabulary_element_label_dict,
+            'dge_harvesters_info': helpers.dge_harvesters_info,
+            'dge_get_organization': helpers.dge_get_organization
+																
             }
 
     # ########################### ITranslation ############################
@@ -117,6 +123,7 @@ class DgeHarvestPlugin(plugins.SingletonPlugin, DefaultTranslation):
         if package_type != 'harvest':
             return facets_dict
 
+																											 
         original_harvest_plugin = plugins.get_plugin('harvest')
         original_harvest_plugin.dataset_facets = lambda facets_dict, package_type: facets_dict
 

@@ -82,34 +82,6 @@ def harvest_source_clear_task(*args, **kwargs):
 
     return result_clear
 
-def harvest_source_graph_clear_task(*args, **kwargs):
-    '''
-    Clears all graphs in virtuoso if source type is dcatapes.
-
-    :param args: args
-    :param kwargs: kwargs
-    '''
-    context = kwargs.get('data')
-    data_dict = context.get('id')
-    check_access('harvest_source_clear', context, data_dict)
-
-    harvest_source_id = data_dict.get('id')
-
-    source = HarvestSource.get(harvest_source_id)
-    if not source:
-        log.error('Harvest source %s does not exist', harvest_source_id)
-        raise NotFound('Harvest source %s does not exist' % harvest_source_id)
-
-    harvest_source_id = source.id
-    model = context['model']
-    
-    
-    harvest_job_ids = _get_harvest_job_ids(model, harvest_source_id)
-    
-    results = _drop_source_graphs_from_virtuoso(harvest_source_id, harvest_job_ids)
-        
-    return {'id': harvest_source_id}
-
 def _drop_source_graphs_from_virtuoso(harvest_source_id, harvest_job_ids):
     '''
     :param harvest_source_id: Harvest source id
