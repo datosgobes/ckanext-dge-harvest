@@ -48,7 +48,7 @@ def log_execution(level=logging.DEBUG):
 
             # Get context info
             cls_name = None
-            if hasattr(args[0], '__class__'):
+            if args and hasattr(args[0], '__class__'):  # First arg is 'self'
                 cls_name = args[0].__class__.__name__
 
             # Inspect params' names

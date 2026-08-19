@@ -18,7 +18,13 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
-from .rdf_store import RDFStore, RDFStoreException, RDFStoreInternalException
+from .rdf_store_exceptions import (
+    RDFStoreConnectionException,
+    RDFStoreException,
+    RDFStoreInternalException,
+    RDFStoreQueryException,
+)
+from .rdf_store import RDFStore
 from .rdf_store_helper import RDFStoreHelper
 from .rdf_store_insert_or_update import RDFStoreInsertOrUpdate
 from .rdf_store_delete import RDFStoreDelete

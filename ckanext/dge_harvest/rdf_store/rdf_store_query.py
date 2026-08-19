@@ -20,13 +20,13 @@
 
 import logging
 import inspect
-from typing import List, Tuple
+from typing import Iterator, List, Tuple
 from collections import deque
 
-from SPARQLWrapper import GET, RDF as RDF_FORMAT, JSON, TURTLE
+from SPARQLWrapper import GET, RDF as RDF_FORMAT, JSON
 
 from urllib.error import HTTPError
-from rdflib import ConjunctiveGraph, Graph, URIRef
+from rdflib import ConjunctiveGraph, URIRef
 from rdflib.exceptions import ParserError
 from ..constants.dcat_ap_es_constants import DCAT, RDF_NAMESPACE, FOAF, XSD, ADMS
 from ..constants.dcat_ap_es_constants import DcatClassNameEnum, DCATAPESPrefixConstants
@@ -40,6 +40,24 @@ class RDFStoreQuery(RDFStoreHelper):
     Class that contains utils method to query data from RDF store (virtuso)
     '''
 
+    def _build_string_cursor_filter(self, ordered_var_name: str, last_value: str = None) -> str:
+        '''
+        Build a keyset filter for ordered string bindings.
+
+        :param ordered_var_name: SPARQL binding name without leading `?`.
+        :type ordered_var_name: str
+
+        :param last_value: Last emitted ordered value.
+        :type last_value: str | None
+
+        :return: SPARQL FILTER clause or empty string.
+        :rtype: str
+        '''
+        if not ordered_var_name or not last_value:
+            return ''
+        escaped_value = self._escape_sparql_string_literal(last_value)
+        return f'FILTER (?{ordered_var_name} > "{escaped_value}")'
+
     def _get_namespace_from_uri(self, uri: str) -> str:
         if not uri:
             return None
@@ -48,6 +66,120 @@ class RDFStoreQuery(RDFStoreHelper):
         if '/' in uri:
             return uri.rsplit('/', 1)[0] + '/'
         return None
+
+    def _escape_sparql_string_literal(self, value: str) -> str:
+        if value is None:
+            return ''
+        return value.replace('\\', '\\\\').replace('"', '\\"')
+
+    def _get_catalog_entity_query_config(self, dcat_class_name: DcatClassNameEnum) -> Tuple[URIRef, URIRef]:
+        '''
+        Resolve RDF class and catalog predicate used to page referenced entities.
+
+        :param dcat_class_name: Entity type to iterate.
+        :type dcat_class_name: DcatClassNameEnum
+
+        :return: Tuple with entity class URI and catalog relation predicate.
+        :rtype: Tuple[URIRef, URIRef]
+        '''
+        if dcat_class_name == DcatClassNameEnum.DATASERVICE:
+            return DCAT.DataService, DCAT.service
+        if dcat_class_name == DcatClassNameEnum.DATASET:
+            return DCAT.Dataset, DCAT.dataset
+        raise ValueError("Unexpected value. Only DATASET or DATASERVICE are expected values.")
+
+    def _build_referenced_entities_batch_query(
+        self,
+        graph_uri: str,
+        class_uri: URIRef,
+        catalog_predicate: URIRef,
+        batch_size: int,
+        last_uri: str = None,
+    ) -> str:
+        '''
+        Build keyset query for one referenced entity URI batch.
+        '''
+        cursor_filter = self._build_string_cursor_filter('uri_order', last_uri)
+        return f'''
+            SELECT DISTINCT ?uri ?uri_order
+            FROM {graph_uri}
+            WHERE {{
+                ?uri {self._get_uriref_to_query(RDF_NAMESPACE.type)} {self._get_uriref_to_query(class_uri)} .
+                ?catalog {self._get_uriref_to_query(RDF_NAMESPACE.type)} {self._get_uriref_to_query(DCAT.Catalog)} ;
+                         {self._get_uriref_to_query(catalog_predicate)} ?uri .
+                BIND(STR(?uri) AS ?uri_order)
+                {cursor_filter}
+            }}
+            ORDER BY ?uri_order
+            LIMIT {batch_size}
+        '''
+
+    def _extract_uri_batch_from_results(self, results: dict) -> Tuple[List[str], str]:
+        '''
+        Extract URI batch and last cursor value from SPARQL JSON results.
+        '''
+        bindings = results["results"]["bindings"] if results and results.get("results") else []
+        uri_batch = []
+        last_uri = None
+        for binding in bindings or []:
+            uri_value = binding.get('uri', {}).get('value')
+            if not uri_value:
+                continue
+            uri_batch.append(uri_value)
+            last_uri = binding.get('uri_order', {}).get('value', uri_value)
+        return uri_batch, last_uri
+
+    @log_debug
+    def iter_referenced_entities_uris_in_catalogs_of_a_graph(
+        self,
+        dcat_class_name: DcatClassNameEnum,
+        batch_size: int = None,
+    ) -> Iterator[List[str]]:
+        '''
+        Yield referenced dataset or dataservice URIs from catalogs using keyset pagination.
+
+        This method avoids LIMIT/OFFSET scans that can trigger Virtuoso sorted TOP
+        errors on large graphs.
+
+        :param dcat_class_name: Entity type to iterate. Only DATASET or DATASERVICE.
+        :type dcat_class_name: DcatClassNameEnum
+
+        :param batch_size: Maximum URIs per batch.
+        :type batch_size: int | None
+
+        :yield: One ordered URI batch at a time.
+        :rtype: Iterator[List[str]]
+
+        :raise RDFStoreException
+        '''
+        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
+        graph_uri = self.get_graph_uri_to_query()
+        batch_size = batch_size or self.max_triples_per_query
+        class_uri, catalog_predicate = self._get_catalog_entity_query_config(dcat_class_name)
+        last_uri = None
+
+        try:
+            while True:
+                query = self._build_referenced_entities_batch_query(
+                    graph_uri,
+                    class_uri,
+                    catalog_predicate,
+                    batch_size,
+                    last_uri,
+                )
+                results = self._set_execute_and_convert_sparql_query_to_virtuoso(query=query, method=GET, return_format=JSON)
+                uri_batch, last_uri = self._extract_uri_batch_from_results(results)
+                if not uri_batch:
+                    break
+
+                log.debug(f'{method_log_prefix} Yielding {len(uri_batch)} {dcat_class_name} URIs from graph {graph_uri}.')
+                yield uri_batch
+
+                if len(uri_batch) < batch_size:
+                    break
+        except (RDFStoreInternalException) as e:
+            log.error(f'{method_log_prefix} An exception has occurred getting referenced {dcat_class_name} uris in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e)
 
     @log_debug
     def get_distinct_objects_by_predicate(self, predicate_value: str) -> List[str]:
@@ -68,7 +200,7 @@ class RDFStoreQuery(RDFStoreHelper):
             result_uris = result_uris = self._get_objects_by_subject_and_predicate(None, predicate_value, True)
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting distincts data objects by predicate_value ={predicate_value}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         log.info(f'{method_log_prefix} End method. Result = {result_uris}')
         return result_uris
 
@@ -102,7 +234,7 @@ class RDFStoreQuery(RDFStoreHelper):
             })
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting namespaces used in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         log.info(f'{method_log_prefix} End method. Result = {result_namespaces}')
         return result_namespaces
 
@@ -155,10 +287,17 @@ class RDFStoreQuery(RDFStoreHelper):
             
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting data of {node_uri} from graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         except (ParserError, SyntaxError) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting data of {node_uri} from graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise RDFStoreException(str(e))
+            raise RDFStoreException(
+                str(e),
+                context={
+                    "operation": inspect.currentframe().f_code.co_name,
+                    "graph_uri": str(graph_uri),
+                    "node_uri": node_uri,
+                },
+            ) from e
         return node_graph
 
     @log_debug
@@ -210,104 +349,40 @@ class RDFStoreQuery(RDFStoreHelper):
             result_graph = self._set_execute_and_convert_sparql_query_to_virtuoso(query=query, method=GET, return_format=RDF_FORMAT)
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting data of {node_uri} from graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         except (ParserError, SyntaxError) as e:
             log.error(f'{method_log_prefix} An exception has occurredgetting data of {node_uri} from graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise RDFStoreException(str(e))
+            raise RDFStoreException(
+                str(e),
+                context={
+                    "operation": inspect.currentframe().f_code.co_name,
+                    "graph_uri": str(graph_uri),
+                    "node_uri": node_uri,
+                    "depth_level": depth_level,
+                },
+            ) from e
         return result_graph
 
     @log_debug
     def get_uris_from_referenced_datasets_or_dataservices_in_catalogs_of_a_graph(self, dcat_class_name:DcatClassNameEnum) -> List[str]:
         '''
-        Get dataservices uris from dataservices that are referenced in the catalogs of a graph
+        Get dataset or dataservice URIs referenced by catalogs using keyset pagination.
 
         :param dcat_class_name: Name of dcat class name. Only DATASET or DATASERVICE are expected values.
         :type dcat_class_name: DcatClassNameEnum
 
-        :return: The list of dataset or datasrvices uris if dcat_class_name is DATASET or DATASERVICE. None in other case.
+        :return: The list of dataset or datasrvices uris if dcat_class_name is DATASET or DATASERVICE. ValueError in other case.
         :rtype: List[str]
 
         :raise: RDFStoreException
         '''
-        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
-        graph_uri = self.get_graph_uri_to_query()
-        result_uris = []
-        try:
-            if dcat_class_name and dcat_class_name == DcatClassNameEnum.DATASERVICE:
-                query = f'''SELECT DISTINCT ?s FROM {graph_uri} WHERE  {{
-                            ?s {self._get_uriref_to_query(RDF_NAMESPACE.type)} {self._get_uriref_to_query(DCAT.DataService)} .
-                            ?catalog {self._get_uriref_to_query(RDF_NAMESPACE.type)} {self._get_uriref_to_query(DCAT.Catalog)} ; {self._get_uriref_to_query(DCAT.service)} ?s .
-                        }}'''
-            elif dcat_class_name and dcat_class_name == DcatClassNameEnum.DATASET:
-                query = f'''SELECT DISTINCT ?s FROM {graph_uri} WHERE  {{
-                            ?s {self._get_uriref_to_query(RDF_NAMESPACE.type)} {self._get_uriref_to_query(DCAT.Dataset)} .
-                            ?catalog {self._get_uriref_to_query(RDF_NAMESPACE.type)} {self._get_uriref_to_query(DCAT.Catalog)} ; {self._get_uriref_to_query(DCAT.dataset)} ?s .
-                        }}'''
-            else:
-                raise ValueError("Unexpected value. Only DATASET or DATASERVICE are expected values.")
-            results = self._set_execute_and_convert_sparql_query_to_virtuoso(query=query, method=GET, return_format=JSON)
-            for result in results["results"]["bindings"]:
-                result_uris.append(result['s']['value'])
-        except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred getting {dcat_class_name} uris in a catalog of graph_uri={graph_uri}. Exception {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
-        return result_uris
+        return [
+            entity_uri
+            for entity_batch in self.iter_referenced_entities_uris_in_catalogs_of_a_graph(dcat_class_name)
+            for entity_uri in entity_batch
+        ]
 
-    @log_debug
-    def get_graph(self, offset:int=None) -> ConjunctiveGraph:
-        '''
-        Get a graph_uri graph and parse in a RDF-xml
 
-        :param offset: the specified number of rows to skip before beginning to return results.
-        :type offset: int
-
-        :return: The complete graph
-        :rtype: :class:`ConjunctiveGraph` instance
-
-        :raise: RDFStoreException
-        '''
-        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
-        try:
-            result = self.get_and_parse_graph(offset)
-            result.serialize(format="pretty-xml").decode("utf-8")
-        except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred getting data from graph. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
-        return result
-
-    @log_debug
-    def get_and_parse_graph(self, offset:int=None) -> ConjunctiveGraph:
-        '''
-        Get a graph_uri graph and parse in a RDF-xml
-        
-        :param offset: the specified number of rows to skip before beginning to return results.
-        :type offset: int
-
-        :return: The complete graph
-        :rtype: :class:`ConjunctiveGraph` instance
-
-        :raise: RDFStoreException
-        '''
-        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
-        graph_uri = self.get_graph_uri_to_query()
-        result = Graph()
-        try:
-            query = f"CONSTRUCT {{ ?s ?p ?o }} FROM {graph_uri} WHERE {{ ?s ?p ?o }} ORDER BY ?s ?p ?o"
-            if self.max_triples_per_query:
-                query = f'{query} LIMIT {self.max_triples_per_query}'
-            if offset:
-                query = f'{query} OFFSET {offset}'
-            results = self._set_execute_and_convert_sparql_query_to_virtuoso(query=query, method=GET, return_format='rdf')
-            if results:
-                graph = ConjunctiveGraph()
-                result = graph.parse(data=results.serialize(format='xml'), format='xml')
-        except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred getting data from graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
-        except (ParserError, SyntaxError) as e:
-            log.error(f'{method_log_prefix} An exception has occurred parsing data from graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise RDFStoreException(str(e))
-        return result
 
     @log_debug
     def get_catalogs_where_a_dataset_or_dataservice_is_referenced(self, dataset_or_dataservice_uri:str) -> List[str]:
@@ -333,7 +408,7 @@ class RDFStoreQuery(RDFStoreHelper):
             result_uris = self.get_objects_by_query(query, 'catalog')
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred finding the catalogs where the dataset or dataservice with uri {dataset_or_dataservice_uri} is referenced in graph_uri={graph_uri}.')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return result_uris
 
     @log_debug
@@ -359,7 +434,7 @@ class RDFStoreQuery(RDFStoreHelper):
                     queue.append(child)
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting catalogs uris sorted by depth_level. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return catalog_uris
 
     @log_debug
@@ -384,7 +459,7 @@ class RDFStoreQuery(RDFStoreHelper):
                 subcatalogs = [node.identifier for node in subtree.all_nodes() if node.identifier != catalog_uri]
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting subcatalog of a catalog. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return subcatalogs
 
     @log_debug
@@ -407,10 +482,11 @@ class RDFStoreQuery(RDFStoreHelper):
                 object_name = 'graph_name'
                 query = f"""SELECT DISTINCT ?{object_name} WHERE {{ GRAPH ?{object_name} {{ ?s ?p ?o }}
                             FILTER STRSTARTS(STR(?{object_name}), '{prefix}') }}"""
-                grahps_names = self.get_objects_by_query(query, object_name)
+                for graph_name_batch in self.get_objects_by_query_in_batches(query, object_name):
+                    grahps_names.extend(graph_name_batch)
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting catalogs uris sorted by depth_level. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return grahps_names
 
     @log_debug
@@ -435,7 +511,7 @@ class RDFStoreQuery(RDFStoreHelper):
                 result_uris.append(result['s']['value'])
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting catalogs with european theme taxonomy in graph {graph}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         log.info(f'{method_log_prefix} End method. Result = {result_uris}')
         return result_uris
 
@@ -460,7 +536,6 @@ class RDFStoreQuery(RDFStoreHelper):
                 result_uris.append(result['s']['value'])
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting catalogs with european theme taxonomy in graph {graph}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         log.info(f'{method_log_prefix} End method. Result = {result_uris}')
         return result_uris
-        

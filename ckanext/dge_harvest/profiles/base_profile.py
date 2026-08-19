@@ -37,7 +37,12 @@ from ckanext.dcat.profiles import RDFProfile, DCT, DCAT
 from ckanext.dcat.exceptions import RDFProfileException
 
 from ckanext.dge_harvest import helpers as dhh
-from ckanext.dge_harvest.constants.constants import ConfigConstants, PrefixConstants, HarvesterConstants
+from ckanext.dge_harvest.constants.constants import (
+    ConfigConstants,
+    PrefixConstants,
+    HarvesterConstants,
+    HarvestMessageDetailConstants,
+)
 from ckanext.dge_harvest.constants.nti_constants import NTIDatasetConstants, NTIHarvesterConstants
 
 from ckan.lib import helpers
@@ -90,6 +95,59 @@ class DGEProfile(RDFProfile):
         if prefix and len(prefix) > 0:
             msg = f"[{prefix}] {msg}"
         return msg
+
+    def _build_message_detail(self, message, level, scope, prefix=None, resource_uri=None, exception=None):
+        """Build structured side context for one profile message."""
+        detail = {
+            HarvestMessageDetailConstants.KEY_LEVEL: level,
+            HarvestMessageDetailConstants.KEY_SCOPE: scope,
+            HarvestMessageDetailConstants.KEY_MESSAGE: message,
+            HarvestMessageDetailConstants.KEY_RESOURCE_URI: (
+                resource_uri
+                if resource_uri is not None
+                else getattr(self, "_current_resource_uri", None)
+            ),
+            HarvestMessageDetailConstants.KEY_EXCEPTION: exception,
+        }
+        if prefix:
+            detail[HarvestMessageDetailConstants.KEY_PREFIX] = prefix
+        return detail
+
+    def _add_structured_message(
+        self,
+        data_dict,
+        message_key,
+        detail_key,
+        message,
+        exception,
+        level,
+        scope,
+        prefix=None,
+        resource_uri=None,
+    ):
+        """Append plain and structured message representations in parallel."""
+        formatted_message = self._build_error_warning_msg(message, prefix)
+        if not formatted_message:
+            return None
+
+        data_dict.setdefault(message_key, [])
+        if formatted_message not in data_dict[message_key]:
+            data_dict[message_key].append(formatted_message)
+
+        if detail_key:
+            data_dict.setdefault(detail_key, [])
+            detail = self._build_message_detail(
+                message=formatted_message,
+                level=level,
+                scope=scope,
+                prefix=prefix,
+                resource_uri=resource_uri,
+                exception=exception,
+            )
+            if detail not in data_dict[detail_key]:
+                data_dict[detail_key].append(detail)
+
+        return formatted_message
 
 
     def _object_value(self, subject, predicate):

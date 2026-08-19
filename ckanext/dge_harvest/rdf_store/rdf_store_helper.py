@@ -27,7 +27,7 @@ from treelib.exceptions import (
     DuplicatedNodeIdError,
     MultipleRootError
 )
-from SPARQLWrapper import POST, GET,  JSON, QueryResult
+from SPARQLWrapper import POST, GET, JSON, QueryResult
 from urllib.error import HTTPError
 from rdflib import URIRef, Literal, Graph
 from ..constants.dcat_ap_es_constants import DCAT, RDF_NAMESPACE, DCT, FOAF, DcatClassNameEnum, LOCN
@@ -59,7 +59,7 @@ class RDFStoreHelper(RDFStore):
             root_catalog_uri =  tree.root if tree else None
         except RDFStoreInternalException as e:
             log.error(f'{method_log_prefix} Exception getting root catalog uri. Exception{type(e): str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return root_catalog_uri   
 
     def _get_hierarchical_catalog_tree(self)-> Tree:
@@ -139,7 +139,7 @@ class RDFStoreHelper(RDFStore):
                     result_uris.append(result['subcatalog']['value'])
             except (RDFStoreInternalException) as e:
                 log.error(f'{method_log_prefix} An exception has occurred getting direct subcatalogs of catalog_uri={catalog_uri} in graph {graph}. {type(e).__name__}: {str(e)}')
-                raise RDFStoreInternalException(str(e))
+                raise RDFStoreInternalException(str(e), context=getattr(e, "context", None)) from e
         log.debug(f'{method_log_prefix} End method. Result = {result_uris}')
         return result_uris
 
@@ -162,7 +162,7 @@ class RDFStoreHelper(RDFStore):
             log.info(f'{method_log_prefix} Dropped graph {graph_uri}.')
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred dropping graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return result
 
     @log_debug
@@ -179,14 +179,15 @@ class RDFStoreHelper(RDFStore):
         graph_uri = self.get_graph_uri_to_query()
         result = None
         try:
-            query = f"CLEAR GRAPH {graph_uri}"
-            result = self._set_and_execute_sparql_query_to_virtuoso(query=query, method=POST, return_format=None)
+            clear_query = f"CLEAR SILENT GRAPH {graph_uri}"
+            result = self._set_and_execute_sparql_query_to_virtuoso(query=clear_query, method=POST, return_format=None)
             log.info(f'{method_log_prefix} Cleared graph {graph_uri}.')
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred clearing graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return result
 
+    #@log_debug
     def _drop_triples_in_graph(self, triples_to_delete:List[Tuple[str, str, str]]) -> QueryResult:
         '''
         Drop triples in the graph_uri graph
@@ -199,6 +200,7 @@ class RDFStoreHelper(RDFStore):
         '''
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         def _drop_triples(batch_size):
+            result = None
             if triples_to_delete:
                 total_batch = len(triples_to_delete) // batch_size + 1
                 for i in range(0, len(triples_to_delete), batch_size):
@@ -207,7 +209,8 @@ class RDFStoreHelper(RDFStore):
                     triples = '\n'.join(f'{s} {p} {o} .' for s, p, o in current_triples_to_delete)
                     query = f'''DELETE {{ GRAPH {graph_uri} {{ {triples} }} }} WHERE {{GRAPH {graph_uri} {{ {triples} }} }}'''
                     log.info(f'{method_log_prefix} Deleting triples in batch... {batch_number}/{total_batch}. \n query={query}')
-                    return self._set_and_execute_sparql_query_to_virtuoso(query=query, method=POST, return_format=None)
+                    result = self._set_and_execute_sparql_query_to_virtuoso(query=query, method=POST, return_format=None)
+            return result
         BATCH_SIZE = RDFStore.BATCH_SIZE_FOR_DELETES
         MIN_BATCH_SIZE = RDFStore.BATCH_SIZE_FOR_DELETES_MIN
         graph_uri = self.get_graph_uri_to_query()
@@ -253,6 +256,7 @@ class RDFStoreHelper(RDFStore):
             result_uris = self.get_objects_by_query(query, object_name)
         return result_uris
 
+    #@log_debug
     def _get_undescribed_dataservices_in_a_distribution(self) -> List[str]:
         '''
         Get URIs of undescribed dataservices in a distribution (metadata DCAT.accessService in Distribution)
@@ -305,7 +309,7 @@ class RDFStoreHelper(RDFStore):
                             f"{self._get_uriref_to_query(result['record_uri']['value'])}")  for result in results or []]
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred finding the catalog records where the dataset or dataservice with uri {dataset_or_dataservice_uri} is the foaf:primarytopic in graph_uri={graph_uri}.')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return triples
 
     def _get_undescribed_datasets_in_a_dataservice(self) -> List[str]:
@@ -350,7 +354,7 @@ class RDFStoreHelper(RDFStore):
             result = self.get_result_of_ask_query(query)
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred checking if there are entities of types {entities_types} in graph_uri={graph_uri}.')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return result
     
     def normalize_geosparql_data_graph_respecting_origin(self, 
@@ -433,4 +437,4 @@ class RDFStoreHelper(RDFStore):
             return None
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred checking the real dataype of ({subject_iri}, {predicate_iri}, {lexical}) in graph_uri={graph_uri}.')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e

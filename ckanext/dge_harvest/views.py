@@ -24,9 +24,18 @@ from ckan.plugins.toolkit import enqueue_job
 from ckan import model
 from ckan import plugins as p
 import ckan.lib.helpers as h
+from ckanext.harvest.model import HarvestJob
 
 from ckanext.dge_harvest import tasks
 from .constants.constants import ViewsConstants
+from ckanext.dge_harvest.services.report.harvest_report_csv import (
+    build_report_csv_filename,
+    render_report_rows_csv,
+)
+from ckanext.dge_harvest.services.report.harvest_report_query import (
+    build_csv_report_rows,
+    normalize_report_query,
+)
 
 _ = toolkit._
 
@@ -87,6 +96,41 @@ def clear(id):
     return h.redirect_to(
         h.url_for('harvester.admin', id=id))
 
+
+def report_csv(source, id):
+    """Download the unified federation report as CSV for one harvest job."""
+    try:
+        context = {'model': model, 'session': model.Session, 'user': toolkit.c.user}
+        toolkit.check_access('dge_harvest_job_report', context, {'id': id})
+
+        harvest_job = (
+            model.Session.query(HarvestJob)
+            .filter(HarvestJob.id == id)
+            .first()
+        )
+        if harvest_job is None:
+            return toolkit.abort(404, _('Harvest job not found'))
+
+        query = normalize_report_query(toolkit.request.args.to_dict())
+        rows = build_csv_report_rows(
+            harvest_job_id=id,
+            query=query,
+            context=context,
+            session=model.Session,
+        )
+        response = make_response(render_report_rows_csv(rows))
+        response.headers['Content-Type'] = 'text/csv; charset=utf-8'
+        response.headers['Content-Disposition'] = (
+            'attachment; filename="{}"'.format(
+                build_report_csv_filename(id)
+            )
+        )
+        return response
+    except (toolkit.ValidationError, ValueError) as exc:
+        return toolkit.abort(400, str(exc))
+    except toolkit.NotAuthorized:
+        return toolkit.abort(403, _not_auth_message())
+
 dgeHarvester.add_url_rule(
     "/delete/<id>",
     view_func=delete, methods=(u'POST', )
@@ -95,4 +139,11 @@ dgeHarvester.add_url_rule(
 dgeHarvester.add_url_rule(
     "/clear/<id>",
     view_func=clear, methods=(u'POST', )
+)
+
+dgeHarvester.add_url_rule(
+    "/<source>/job/<id>/report.csv",
+    view_func=report_csv,
+    endpoint="report_csv",
+    methods=(u'GET', ),
 )

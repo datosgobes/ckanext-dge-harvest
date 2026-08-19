@@ -22,24 +22,29 @@ import logging
 import time
 import traceback
 import inspect
+from functools import partial
 
-from typing import List, Tuple, Union
+from typing import Dict, List, Tuple, Union
 from rdflib import URIRef, Graph
 from ckanext.dge_harvest import helpers as dhh
-from ckanext.harvest.model import (HarvestGatherError, HarvestJob)
+from ckanext.harvest.model import HarvestJob
 from ...constants import (DCATAPESConfigConstants as CC,
-                            DCATAPESHarvesterConstants as HarvesterConstants, 
                             DCATAPESPrefixConstants as PrefixConstants,
                             DcatClassNameEnum) 
-from ...constants.dcat_ap_es_constants import DCAT, ADMS
-from ...rdf_store  import RDFStoreComplete
-from .shacl_validator import ShaclValidator
-from .vocabulary_validator import VocabularyValidator
-from ...harvester_config_reader import HarvesterConfigReader
-from .rdf_validator import DcatApEsRdfValidator, RdfValidatorException
-from . import gather_stage_validation_utils
-from ...decorators import log_debug, log_info
-
+from ckanext.dge_harvest.constants.dcat_ap_es_constants import DCAT, ADMS
+from ckanext.dge_harvest.rdf_store  import RDFStoreComplete
+from ckanext.dge_harvest.harvesters.utils.shacl_validator import ShaclValidator
+from ckanext.dge_harvest.harvesters.utils.vocabulary_validator import VocabularyValidator
+from ckanext.dge_harvest.harvester_config_reader import HarvesterConfigReader
+from ckanext.dge_harvest.harvesters.utils.rdf_validator import DcatApEsRdfValidator
+from ckanext.dge_harvest.harvesters.utils import gather_stage_validation_utils
+from ckanext.dge_harvest.decorators import log_debug, log_info
+from ckanext.dge_harvest.services.report.harvest_report_dimensions import (
+    REPORT_PHASE_VALIDATION,
+)
+from ckanext.dge_harvest.harvesters.dge_harvester_exceptions import (
+    RdfValidatorException,
+)
 log = logging.getLogger(__name__)
 
 class GatherStageValidationException(Exception):
@@ -51,7 +56,6 @@ class GatherStageValidation():
     """
     This class is responsible for processing certain aspects in the gather stage of the harvest.
     """
-    _save_gather_error = HarvestGatherError.create 
 
     def _get_log_prefix(self, method_name):
         return f'[{self.__class__.__name__}][{method_name}]'
@@ -127,11 +131,10 @@ class GatherStageValidation():
             avalible_publisher_id_minhap = [PrefixConstants.PUBLISHER_PREFIX + id_minhap for id_minhap in avalible_publisher_id_minhap]
             self.rdf_validator.check_if_publishers_are_right(avalible_publisher_id_minhap)
             self.rdf_validator.check_if_creators_are_right(avalible_publisher_id_minhap)
-        except (RdfValidatorException, Exception) as e:
-            log.error(f'{method_log_prefix} End method. Exception prevalidating complete RDF from graph_uri {self.graph_uri}. Exception {type(e).__name__}: {str(e)}')
-            self._save_gather_error(HarvesterConstants.SHACL_VALIDATION_ERROR.format(self.harvest_job.source.url, e), self.harvest_job)
-            raise GatherStageValidationException(e)
-        log.debug(f'{method_log_prefix} Root catalog uri = {self.root_catalog_uri}')
+        except (RdfValidatorException) as e:
+            log.exception(f"{method_log_prefix} Error checkin organisms")
+            raise e
+
 
     def _get_validation_configuration(self, shacl_validator, hvd_shacl_validator, section):
         if shacl_validator is None or hvd_shacl_validator is None:
@@ -140,6 +143,7 @@ class GatherStageValidation():
             hvd_shacl_validator = ShaclValidator(shacl_shapes_uri_list = None, ontology_uri_list = default_ontology_uri_list)
         # Get harvester configuration dictionary
         harvester_catalog_config = gather_stage_validation_utils.get_harvester_config_dict(self.harvester_config_reader, section)
+        # Validacion shacl del catalogo
         shacl_validator.load_shacl_shapes_graph(harvester_catalog_config.get(CC.SHACL_SHAPES, None))
         hvd_shacl_validator.load_shacl_shapes_graph(harvester_catalog_config.get(CC.COMBINED_SHACL_SHAPES, None))
         return shacl_validator, hvd_shacl_validator, harvester_catalog_config
@@ -167,7 +171,7 @@ class GatherStageValidation():
         return shacl_validator, hvd_shacl_validator, harvester_catalog_config, catalogs_uris
 
     @log_info
-    def validate_catalog(self, catalog_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, harvester_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool, Graph]:
+    def validate_catalog(self, catalog_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, harvester_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool, Graph, List[str], List[str]]:
         '''
         Validate if data in catalog_uri is conforms to vocabulary and shacl templates
         
@@ -186,7 +190,9 @@ class GatherStageValidation():
         :returns a Tuple:
             - True if catalog is conforms, False in other case
             - graph with catalog data
-        :rtype: Tupla[bool, Graph]
+            - List of vocabulary message errors
+            - List of shacl message errors
+        :rtype: Tupla[bool, Graph, List[str], List[str]]
         '''        
         if not harvester_config_dict:
             harvester_config_dict = {}
@@ -196,24 +202,20 @@ class GatherStageValidation():
         catalog_data = self.rdf_store.rdf_store_query.get_customized_node(node_uri = catalog_uri,
                                                                               predicates_to_exclude = [],
                                                                               node_classes_to_exclude = [],
-                                                                              predicates_to_include_only_their_type = []
+                                                                              predicates_to_include_only_their_type = [],
+                                                                              normalize_node=True
                                                                               )
 
         # check vocabularies and shacl templates:
         conforms, vocabulary_validation_error_messages, shacl_messages = gather_stage_validation_utils.check_vocabulary_and_shacl_validation(catalog_uri, catalog_data, self.vocabulary_validator, shacl_validator, hvd_shacl_validator, metadata_vocabularies, combined_metadata_vocabularies)
-        for message in vocabulary_validation_error_messages or []:
-            self._save_gather_error(f'Error in catalog {catalog_uri}. {message}', self.harvest_job)
-        for message in shacl_messages or []:
-            self._save_gather_error(message, self.harvest_job)
         if not conforms:
             self.delete_not_conform_catalog(catalog_uri)
             catalog_data = None
-        return conforms, catalog_data
+        return conforms, catalog_data, vocabulary_validation_error_messages, shacl_messages
 
     @log_info
     def delete_not_conform_catalog(self, catalog_uri):
         self.rdf_store.rdf_store_delete.delete_catalogs_in_graph(([catalog_uri] + (self.rdf_store.rdf_store_query.get_subcatalogs_uris_of_a_catalog(catalog_uri) or [])))
-        self._save_gather_error(HarvesterConstants.DELETE_CATALOG.format(catalog_uri), self.harvest_job)
 
     @log_debug
     def get_data_to_run_dataservices_validation(self, shacl_validator, hvd_shacl_validator) -> Tuple[ShaclValidator, ShaclValidator, HarvesterConfigReader, List[str]]:
@@ -233,7 +235,7 @@ class GatherStageValidation():
         return shacl_validator, hvd_shacl_validator, harvester_dataservice_config, all_dataservices
 
     @log_info
-    def validate_dataservice(self, dataservice_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, harvester_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool, Graph]:
+    def validate_dataservice(self, dataservice_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, harvester_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool, Graph, List[str], List[str]]:
         '''
         Validate if data in dataservice_uri is conforms to vocabulary and shacl templates
         
@@ -252,7 +254,9 @@ class GatherStageValidation():
         :returns a Tuple:
             - True if dataservice is conforms, False in other case
             - graph with dataservice data
-        :rtype: Tupla[bool, Graph]
+            - List of vocabulary message errors
+            - List of shacl message errors
+        :rtype: Tupla[bool, Graph, List[str], List[str]]
         '''        
         if not harvester_config_dict:
             harvester_config_dict = {}
@@ -262,23 +266,19 @@ class GatherStageValidation():
         dataservice_data = self.rdf_store.rdf_store_query.get_customized_node(node_uri = dataservice_uri,
                                                                               predicates_to_exclude = [],
                                                                               node_classes_to_exclude = [],
-                                                                              predicates_to_include_only_their_type = []
+                                                                              predicates_to_include_only_their_type = [],
+                                                                              normalize_node=True
                                                                               )
         # check vocabularies and shacl templates:
         conforms, vocabulary_validation_error_messages, shacl_messages = gather_stage_validation_utils.check_vocabulary_and_shacl_validation(dataservice_uri, dataservice_data, self.vocabulary_validator, shacl_validator, hvd_shacl_validator, metadata_vocabularies, combined_metadata_vocabularies)
-        for message in vocabulary_validation_error_messages or []:
-            self._save_gather_error(f'Error in dataservice {dataservice_uri}. {message}', self.harvest_job)
-        for message in shacl_messages or []:
-            self._save_gather_error(message, self.harvest_job)
         if not conforms:
             # if not conforms, drop dataservice in graph
             self.delete_not_conform_dataservice(dataservice_uri)
-        return conforms, dataservice_data
+        return conforms, dataservice_data, vocabulary_validation_error_messages, shacl_messages
 
     @log_info
     def delete_not_conform_dataservice(self, dataservice_uri):
         self.rdf_store.rdf_store_delete.delete_dataservice_in_graph(dataservice_uri)
-        self._save_gather_error(HarvesterConstants.DELETE_DATASERVICE.format(dataservice_uri), self.harvest_job)
 
     @log_debug
     def get_data_to_run_datasets_validation(self, shacl_validator, hvd_shacl_validator) -> Tuple[ShaclValidator, ShaclValidator, HarvesterConfigReader, List[str]]:
@@ -298,7 +298,7 @@ class GatherStageValidation():
         return shacl_validator, hvd_shacl_validator, harvester_dataset_config, all_datasets
 
     @log_info
-    def validate_dataset(self, dataset_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, dist_shacl_validator:ShaclValidator, dist_hvd_shacl_validator:ShaclValidator, harvester_dataset_config_dict:dict[str, Union[List[str], dict[str, List[str]]]], harvester_distribution_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool, Graph]:
+    def validate_dataset(self, dataset_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, dist_shacl_validator:ShaclValidator, dist_hvd_shacl_validator:ShaclValidator, harvester_dataset_config_dict:dict[str, Union[List[str], dict[str, List[str]]]], harvester_distribution_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool, Graph, int, List[str], List[str], List[Tuple[str, List[str], List[Dict[str, str]]]]]:
         '''
         Validate if data in dataset_uri is conforms to vocabulary and shacl templates
         
@@ -326,7 +326,11 @@ class GatherStageValidation():
         :returns a Tuple:
             - True if dataservice is conforms, False in other case
             - graph with dataservice data
-        :rtype: Tupla[bool, Graph]
+            - number of conforms dataset distributions
+            - List of vocabulary message errors in dataset
+            - List of shacl message errors in datasts
+            - Distribution URI and its vocabulary and SHACL errors
+        :rtype: Tuple[bool, Graph, int, List[str], List[str], List[Tuple[str, List[str], List[Dict[str, str]]]]]
         '''        
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         
@@ -339,15 +343,11 @@ class GatherStageValidation():
         dataset_data = self.rdf_store.rdf_store_query.get_customized_node(node_uri = dataset_uri,
                                                                               predicates_to_exclude = [],
                                                                               node_classes_to_exclude = [],
-                                                                              predicates_to_include_only_their_type = [DCAT.distribution, ADMS.sample]
+                                                                              predicates_to_include_only_their_type = [DCAT.distribution, ADMS.sample],
+                                                                              normalize_node=True
                                                                         )
         # check vocabularies and shacl templates:
         conforms, vocabulary_validation_error_messages, shacl_messages = gather_stage_validation_utils.check_vocabulary_and_shacl_validation(dataset_uri, dataset_data, self.vocabulary_validator, shacl_validator, hvd_shacl_validator, metadata_vocabularies, combined_metadata_vocabularies)
-        for message in vocabulary_validation_error_messages or []:
-            self._save_gather_error(f'Error in dataset {dataset_data}. {message}', self.harvest_job)
-        for message in shacl_messages or []:
-            self._save_gather_error(message, self.harvest_job)
-
         log.debug(f'{method_log_prefix} Init distributions shacl validation')
         # Get distribution uris
         sample_uris = set(dataset_data.objects(subject=URIRef(dataset_uri), predicate=URIRef(ADMS.sample)))
@@ -358,28 +358,32 @@ class GatherStageValidation():
         complete_dataset_data = dataset_data
         num_distr = 0
         total_number_of_distributions = len(all_distribution_uris)
-        for distribution_uri in all_distribution_uris:
+        distribution_validation_messages = []
+        for distribution_uri in sorted(all_distribution_uris, key=str):
             num_distr = num_distr + 1
             log.info(f'{method_log_prefix} #### VALIDATING DISTRIBUTION {num_distr} OF {total_number_of_distributions} OF DATASET {dataset_uri}: {distribution_uri}')
-            distribution_conforms, distribution_data = self._validate_distribution(dataset_uri, distribution_uri, dist_shacl_validator, dist_hvd_shacl_validator, harvester_distribution_config_dict)
+            distribution_conforms, distribution_data, distribution_vocabulary_validation_error_messages, distribution_shacl_messages = self._validate_distribution(dataset_uri, distribution_uri, dist_shacl_validator, dist_hvd_shacl_validator, harvester_distribution_config_dict)
             all_distribution_conforms = all_distribution_conforms and distribution_conforms
+            distribution_validation_messages.append((
+                str(distribution_uri),
+                distribution_vocabulary_validation_error_messages,
+                distribution_shacl_messages,
+            ))
             # to know if dataset has conforms distribution in dcat:distribution
             if distribution_conforms and distribution_uri in distribution_uris:
                 distribution_conforms_number += 1
             complete_dataset_data += distribution_data
-        if distribution_conforms_number == 0:
-            self._save_gather_error(HarvesterConstants.NO_VALID_DISTRIBUTION_IN_DATASET.format(dataset_uri), self.harvest_job)
+
         log.debug(f'{method_log_prefix} End distribution shacl validation')
         if not conforms or not all_distribution_conforms or distribution_conforms_number == 0:
             # if not conforms, drop dataset in graph
             conforms = False
             self.delete_not_conform_dataset(dataset_uri)
-        return conforms, complete_dataset_data
+        return conforms, complete_dataset_data, distribution_conforms_number, vocabulary_validation_error_messages, shacl_messages, distribution_validation_messages
 
     @log_info
     def delete_not_conform_dataset(self, dataset_uri):
         self.rdf_store.rdf_store_delete.delete_dataset_in_graph(dataset_uri)
-        self._save_gather_error(HarvesterConstants.DELETE_DATASET.format(dataset_uri), self.harvest_job)
 
     @log_debug
     def get_data_to_run_distributions_validation(self, shacl_validator, hvd_shacl_validator) -> Tuple[ShaclValidator, ShaclValidator, HarvesterConfigReader, List[str]]:
@@ -397,7 +401,7 @@ class GatherStageValidation():
         return shacl_validator, hvd_shacl_validator, harvester_distribution_config
 
     @log_info
-    def _validate_distribution(self, dataset_uri: str, distribution_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, harvester_distribution_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool,Graph]:
+    def _validate_distribution(self, dataset_uri: str, distribution_uri:str, shacl_validator:ShaclValidator, hvd_shacl_validator:ShaclValidator, harvester_distribution_config_dict:dict[str, Union[List[str], dict[str, List[str]]]]) -> Tuple[bool,Graph, List[str], List[str]]:
         '''
         Get distribution data and check if data is conforms to vocabulary 
         
@@ -419,8 +423,12 @@ class GatherStageValidation():
         :param harvester_distribution_config_dict: Dictionary with the configuration of distribution harvester.
         :type harvester_distribution_config_dict: dict[str, Union[List[str], dict[str, List[str]]]]
         
-        :returns: True if distribution is conforms, False in other case
-        :rtype: bool
+        :returns: a Tuple with:
+            - True if distribution is conforms, False in other case
+            - graph with distribution data
+            - List of vocabulary message errors in distribution
+            - List of shacl message errors in distribution
+        :rtype: Tuple[bool,Graph, List[str], List[str]]:
         '''        
         # Harvester distribution config
         if not harvester_distribution_config_dict:
@@ -432,12 +440,9 @@ class GatherStageValidation():
         distribution_data = self.rdf_store.rdf_store_query.get_customized_node(node_uri = distribution_uri,
                                                                               predicates_to_exclude = [],
                                                                               node_classes_to_exclude = [],
-                                                                              predicates_to_include_only_their_type = []
+                                                                              predicates_to_include_only_their_type = [],
+                                                                              normalize_node=True
                                                                               )
         # check vocabularies and shacl templates:
         conforms, vocabulary_validation_error_messages, shacl_messages = gather_stage_validation_utils.check_vocabulary_and_shacl_validation(distribution_uri, distribution_data, self.vocabulary_validator, shacl_validator, hvd_shacl_validator, metadata_vocabularies, combined_metadata_vocabularies)
-        for message in vocabulary_validation_error_messages or []:
-            self._save_gather_error(f'Error in distribution {distribution_uri} of dataset {dataset_uri}. {message}', self.harvest_job)
-        for message in shacl_messages or []:
-            self._save_gather_error(message, self.harvest_job)
-        return conforms, distribution_data
+        return conforms, distribution_data, vocabulary_validation_error_messages, shacl_messages

@@ -35,6 +35,7 @@ from ..constants import (DCATAPESPrefixConstants as PrefixConstants,
                         DCATAPESSerializerConstants as SerializerConstants, 
                         DCATAPESConfigConstants as ConfigConstants,
                         NTIDatasetConstants)
+from ..constants.constants import CommonPackageConstants
 from .base_profile import DGEProfile
 from . import _profile_serialize_utils, _profile_utils
 from .dcat_ap_es_profile_parse_utils_base import DGEDCATAPESProfileParseUtilsBase
@@ -42,7 +43,6 @@ from .base_profile_parse_utils_base import BaseProfileParseUtilsBase
 from ..harvester_config_reader import HarvesterConfigReader
 from ..constants.dcat_ap_es_constants import (NAMESPACES, DCT, DCAT, DCATAP, FOAF, RDF_NAMESPACE, ADMS, TIME, XSD, RDFS, SCHEMA, PROV, ODRL, SPDX, SKOS_NAMESPACE)
 from ..decorators import log_debug, log_info
-from .. import helpers as dhh
 from ..vocabulary_utils import dge_harvest_get_vocabulary_element_labels
 
 BASIC_FIELDS_METADATA = [
@@ -103,12 +103,24 @@ class DGEDCATAPESProfile(DGEProfile):
             dcat_ap_offered_locales.append(self._from_iso_6391_to_language_DCAT_AP(locale))
         return dcat_ap_offered_locales
 
+    def _initialize_message_detail_lists(self, data_dict):
+        data_dict[CommonPackageConstants.KEY_ERROR_DETAILS] = data_dict.get(
+            CommonPackageConstants.KEY_ERROR_DETAILS, []
+        )
+        data_dict[CommonPackageConstants.KEY_WARNING_DETAILS] = data_dict.get(
+            CommonPackageConstants.KEY_WARNING_DETAILS, []
+        )
+
     @log_debug
     def parse_catalog(self, catalog_dict, catalog_ref):
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         self._initialize_parse_utils()
         key_catalog_errors = CatalogConstants.KEY_CATALOG_ERRORS
+        key_catalog_warnings = CatalogConstants.KEY_CATALOG_WARNINGS
+        self._current_resource_uri = self._get_uri_ref(catalog_ref)
         catalog_dict[key_catalog_errors] = []
+        catalog_dict[key_catalog_warnings] = []
+        self._initialize_message_detail_lists(catalog_dict)
         metadata = None
         try:
             allowed_publishers = self._get_available_organizations(catalog_dict)
@@ -183,18 +195,29 @@ class DGEDCATAPESProfile(DGEProfile):
         except Exception as e:
             error_msg = f"{type(e).__name__}: {e}"
             if metadata:
-                error_msg = HarvesterConstants.VALIDATION_ERROR_MESSAGE.format(catalog_ref, metadata, error_msg)
+                error_msg = HarvesterConstants.VALIDATION_CATALOG_MESSAGE.format(catalog_ref, metadata)
             else:
-                error_msg = HarvesterConstants.VALIDATION_UNEXPECTED_ERROR_MESSAGE.format(catalog_ref, error_msg)
-            catalog_dict[key_catalog_errors].append(self._build_error_warning_msg(error_msg, None))
+                error_msg = HarvesterConstants.VALIDATION_UNEXPECTED_CATALOG_ERROR_MESSAGE.format(catalog_ref)
+            self._add_structured_message(
+                data_dict=catalog_dict,
+                message_key=key_catalog_errors,
+                detail_key=CommonPackageConstants.KEY_ERROR_DETAILS,
+                message=error_msg,
+                level="error",
+                scope="catalog",
+                exception=e,
+                
+            )
             log.error(f'{method_log_prefix} Exception parsing catalog {catalog_ref}. {error_msg}', exc_info=True)
         return catalog_dict
 
     @log_debug
     def parse_dataset(self, dataset_dict, dataset_ref):
         self._initialize_parse_utils()
+        self._current_resource_uri = self._get_uri_ref(dataset_ref)
         dataset_dict[DatasetConstants.KEY_ERRORS] = []
         dataset_dict[DatasetConstants.KEY_WARNINGS] = []
+        self._initialize_message_detail_lists(dataset_dict)
         self.parse_dataset_error_message = None
         try:
             self._parse_basic_dataset_data(dataset_dict, dataset_ref)
@@ -202,8 +225,16 @@ class DGEDCATAPESProfile(DGEProfile):
                 self._parse_complete_dataset_data(dataset_dict, dataset_ref)
         except Exception as e:
             if not self.parse_dataset_error_message:
-                self.parse_dataservice_error_message = f"{type(e).__name__}: {e}"
-            dataset_dict[DatasetConstants.KEY_ERRORS].append(self._build_error_warning_msg(self.parse_dataservice_error_message, None))
+                self.parse_dataset_error_message = f"{type(e).__name__}: {e}"
+            self._add_structured_message(
+                data_dict=dataset_dict,
+                message_key=DatasetConstants.KEY_ERRORS,
+                detail_key=CommonPackageConstants.KEY_ERROR_DETAILS,
+                message=self.parse_dataset_error_message,
+                level="error",
+                scope="dataset",
+                exception=e,
+            )
         return dataset_dict
 
     def _parse_basic_dataset_data(self, dataset_dict, dataset_ref):
@@ -240,9 +271,9 @@ class DGEDCATAPESProfile(DGEProfile):
             error_msg = f"{type(e).__name__}: {str(e)}"
             log.error(f'{method_log_prefix} Exception parsing dataset {dataset_ref}. {error_msg}.', exc_info=True)
             if metadata:
-                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_ERROR_MESSAGE.format(dataset_ref, self.metadata, error_msg)
+                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_DATASET_ERROR_MESSAGE.format(dataset_ref, metadata)
             else:
-                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_ERROR_MESSAGE.format(dataset_ref, error_msg)
+                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_DATASET_ERROR_MESSAGE.format(dataset_ref)
             raise e
 
     def _parse_complete_dataset_data(self, dataset_dict, dataset_ref):
@@ -253,6 +284,7 @@ class DGEDCATAPESProfile(DGEProfile):
             # Language (dct:language) optional, multiple
             metadata = DCT.language
             self._add_to_dictionary_if_value_not_empty(dataset_dict, DatasetConstants.KEY_DATASET_LANGUAGE, self.parse_utils.object_uriref_value_list(dataset_ref, metadata), False)
+
 
             # Identifier (dct:identifier) optional, multiple
             metadata = DCT.identifier
@@ -385,25 +417,26 @@ class DGEDCATAPESProfile(DGEProfile):
             # Sample (adms:sample) optional, multiple
             metadata = ADMS.sample
             samples = self.parse_utils._get_samples(dataset_ref, metadata)
-
-            # Resources
-            for distribution_ref in self._distributions(dataset_ref) or []:
-                resource_dict = self.parse_distribution(dataset_dict, dataset_ref, distribution_ref, False)
-                dataset_dict['resources'].append(resource_dict)
-
-            for sample_ref in samples:
-                sample_dict = self.parse_distribution(dataset_dict, dataset_ref, sample_ref, True)
-                dataset_dict['resources'].append(sample_dict)
+        
 
         except Exception as e:
             if not self.parse_dataset_error_message:
                 error_msg = f"{type(e).__name__}: {str(e)}"
                 log.error(f'{method_log_prefix} Exception parsing dataset {dataset_ref}. {error_msg}.', exc_info=True)
                 if metadata:
-                    self.parse_dataset_error_message = HarvesterConstants.VALIDATION_ERROR_MESSAGE.format(dataset_ref, self.metadata, error_msg)
+                    self.parse_dataset_error_message = HarvesterConstants.VALIDATION_DATASET_ERROR_MESSAGE.format(dataset_ref, metadata)
                 else:
-                    self.parse_dataset_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_ERROR_MESSAGE.format(dataset_ref, error_msg)
+                    self.parse_dataset_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_DATASET_ERROR_MESSAGE.format(dataset_ref)
             raise e
+
+        # Resources
+        for distribution_ref in self._distributions(dataset_ref) or []:
+            resource_dict = self.parse_distribution(dataset_dict, dataset_ref, distribution_ref, False)
+            dataset_dict['resources'].append(resource_dict)
+
+        for sample_ref in samples:
+            sample_dict = self.parse_distribution(dataset_dict, dataset_ref, sample_ref, True)
+            dataset_dict['resources'].append(sample_dict)
 
     @log_debug
     def parse_distribution(self, dataset_dict, dataset_ref, distribution_ref, is_sample):
@@ -528,9 +561,9 @@ class DGEDCATAPESProfile(DGEProfile):
             error_msg = f"{type(e).__name__}: {str(e)}"
             log.error(f'{method_log_prefix} Exception parsing distribution {distribution_ref} of dataset {dataset_ref}. {error_msg}.', exc_info=True)
             if metadata:
-                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_SUBNODE_ERROR_MESSAGE.format(distribution_ref, dataset_ref, self.metadata, error_msg)
+                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_DISTRIBUTION_ERROR_MESSAGE.format(distribution_ref, dataset_ref, metadata)
             else:
-                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_SUBNODE_UNEXPECTED_ERROR_MESSAGE.format(distribution_ref, dataset_ref, error_msg)
+                self.parse_dataset_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_DISTRIBUTION_ERROR_MESSAGE.format(distribution_ref, dataset_ref)
             raise e
 
         return resource_dict
@@ -540,8 +573,10 @@ class DGEDCATAPESProfile(DGEProfile):
         self._initialize_parse_utils()
         key_dataservice_errors = DataserviceConstants.KEY_ERRORS
         key_dataservice_warnings = DataserviceConstants.KEY_WARNINGS
+        self._current_resource_uri = self._get_uri_ref(dataservice_ref)
         dataservice_dict[key_dataservice_errors] = []
         dataservice_dict[key_dataservice_warnings] = []
+        self._initialize_message_detail_lists(dataservice_dict)
         self.parse_dataservice_error_message = None
         try:
             self._parse_basic_dataservice_data(dataservice_dict, dataservice_ref)
@@ -550,7 +585,15 @@ class DGEDCATAPESProfile(DGEProfile):
         except Exception as e:
             if not self.parse_dataservice_error_message:
                 self.parse_dataservice_error_message = f"{type(e).__name__}: {e}"
-            dataservice_dict[key_dataservice_errors].append(self._build_error_warning_msg(self.parse_dataservice_error_message, None))
+            self._add_structured_message(
+                data_dict=dataservice_dict,
+                message_key=key_dataservice_errors,
+                detail_key=CommonPackageConstants.KEY_ERROR_DETAILS,
+                message=self.parse_dataservice_error_message,
+                level="error",
+                scope="dataservice",
+                exception=e
+            )
         return dataservice_dict
 
     @log_debug
@@ -588,9 +631,9 @@ class DGEDCATAPESProfile(DGEProfile):
             error_msg = f"{type(e).__name__}: {str(e)}"
             log.error(f'{method_log_prefix} Exception parsing dataservice {dataservice_ref}. {error_msg}.', exc_info=True)
             if metadata:
-                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_ERROR_MESSAGE.format(dataservice_ref, self.metadata, error_msg)
+                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_DATASERVICE_ERROR_MESSAGE.format(dataservice_ref, metadata)
             else:
-                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_ERROR_MESSAGE.format(dataservice_ref, error_msg)
+                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_DATASERVICE_ERROR_MESSAGE.format(dataservice_ref)
             raise e
 
     @log_debug
@@ -649,9 +692,9 @@ class DGEDCATAPESProfile(DGEProfile):
             error_msg = f"{type(e).__name__}: {str(e)}"
             log.error(f'{method_log_prefix} Exception parsing dataservice {dataservice_ref}. {error_msg}.', exc_info=True)
             if metadata:
-                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_ERROR_MESSAGE.format(dataservice_ref, self.metadata, error_msg)
+                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_DATASERVICE_ERROR_MESSAGE.format(dataservice_ref, metadata)
             else:
-                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_ERROR_MESSAGE.format(dataservice_ref, error_msg)
+                self.self.parse_dataservice_error_message = HarvesterConstants.VALIDATION_UNEXPECTED_DATASERVICE_ERROR_MESSAGE.format(dataservice_ref)
             raise e
 
     @log_debug

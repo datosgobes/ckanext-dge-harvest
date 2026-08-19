@@ -1,0 +1,121 @@
+# Copyright (C) 2026 Entidad Pública Empresarial Red.es
+#
+# This file is part of "dge-harvest (datos.gob.es)".
+#
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program. If not, see <http://www.gnu.org/licenses/>.
+
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+"""Constants for the LFTNN harvest report message-code convention."""
+
+import re
+
+from ckanext.dge_harvest.services.report.harvest_report_dimensions import (
+    REPORT_CATEGORY_COMMON,
+    REPORT_CATEGORY_SHACL,
+    REPORT_CATEGORY_TECHNICAL,
+    REPORT_CATEGORY_VOCABULARY,
+    REPORT_PHASE_DOWNLOAD,
+    REPORT_PHASE_FALLBACK,
+    REPORT_PHASE_IMPORT,
+    REPORT_PHASE_PREPROCESSING,
+    REPORT_PHASE_SETUP,
+    REPORT_PHASE_STORAGE,
+    REPORT_PHASE_VALIDATION,
+)
+from ckanext.dge_harvest.services.report.harvest_report_severity import (
+    MESSAGE_LEVEL_ERROR,
+    MESSAGE_LEVEL_INFO,
+    MESSAGE_LEVEL_WARNING,
+)
+
+ERROR_LEVEL = MESSAGE_LEVEL_ERROR
+WARN_LEVEL = MESSAGE_LEVEL_WARNING
+INFO_LEVEL = MESSAGE_LEVEL_INFO
+
+ERROR_LEVEL_CODE = "E"
+WARN_LEVEL_CODE = "W"
+INFO_LEVEL_CODE = "I"
+
+LEVEL_TO_CODE = {
+    ERROR_LEVEL: ERROR_LEVEL_CODE,
+    WARN_LEVEL: WARN_LEVEL_CODE,
+    INFO_LEVEL: INFO_LEVEL_CODE,
+}
+
+CODE_TO_LEVEL = {
+    ERROR_LEVEL_CODE: ERROR_LEVEL,
+    WARN_LEVEL_CODE: WARN_LEVEL,
+    INFO_LEVEL_CODE: INFO_LEVEL,
+}
+
+
+SETUP_PHASE_CODE = "0"
+DOWNLOAD_PHASE_CODE = "1"
+STORAGE_PHASE_CODE = "2"
+PREPROCESSING_PHASE_CODE = "3"
+VALIDATION_PHASE_CODE = "4"
+IMPORT_PHASE_CODE = "5"
+FALLBACK_PHASE_CODE = "9"
+
+PHASE_TO_CODE = {
+    REPORT_PHASE_SETUP: SETUP_PHASE_CODE,
+    REPORT_PHASE_DOWNLOAD: DOWNLOAD_PHASE_CODE,
+    REPORT_PHASE_STORAGE: STORAGE_PHASE_CODE,
+    REPORT_PHASE_PREPROCESSING: PREPROCESSING_PHASE_CODE,
+    REPORT_PHASE_VALIDATION: VALIDATION_PHASE_CODE,
+    REPORT_PHASE_IMPORT: IMPORT_PHASE_CODE,
+    REPORT_PHASE_FALLBACK: FALLBACK_PHASE_CODE,
+}
+
+CODE_TO_PHASE = {
+    SETUP_PHASE_CODE: REPORT_PHASE_SETUP,
+    DOWNLOAD_PHASE_CODE: REPORT_PHASE_DOWNLOAD,
+    STORAGE_PHASE_CODE: REPORT_PHASE_STORAGE,
+    PREPROCESSING_PHASE_CODE: REPORT_PHASE_PREPROCESSING,
+    VALIDATION_PHASE_CODE: REPORT_PHASE_VALIDATION,
+    IMPORT_PHASE_CODE: REPORT_PHASE_IMPORT,
+    FALLBACK_PHASE_CODE: REPORT_PHASE_FALLBACK,
+}
+
+
+COMMON_FAMILY_CODE = "0"
+SHACL_FAMILY_CODE = "2"
+VOCABULARY_FAMILY_CODE = "3"
+TECHNICAL_FAMILY_CODE = "5"
+
+CATEGORY_TO_FAMILY_CODE = {
+    REPORT_CATEGORY_COMMON: COMMON_FAMILY_CODE,
+    REPORT_CATEGORY_SHACL: SHACL_FAMILY_CODE,
+    REPORT_CATEGORY_VOCABULARY: VOCABULARY_FAMILY_CODE,
+    REPORT_CATEGORY_TECHNICAL: TECHNICAL_FAMILY_CODE,
+}
+
+FAMILY_CODE_TO_CATEGORY = {
+    COMMON_FAMILY_CODE: REPORT_CATEGORY_COMMON,
+    SHACL_FAMILY_CODE: REPORT_CATEGORY_SHACL,
+    VOCABULARY_FAMILY_CODE: REPORT_CATEGORY_VOCABULARY,
+    TECHNICAL_FAMILY_CODE: REPORT_CATEGORY_TECHNICAL,
+}
+
+MESSAGE_CODE_PATTERN = re.compile(
+    r"^(?P<level>[{}])(?P<phase>[{}])(?P<family>[{}])(?P<case>\d{{2}})$".format(
+        "".join(CODE_TO_LEVEL.keys()),
+        "".join(CODE_TO_PHASE.keys()),
+        "".join(FAMILY_CODE_TO_CATEGORY.keys()),
+    )
+)
+
+#MESSAGE_CODE_PATTERN = re.compile(r"^(?P<level>[EWI])(?P<phase>[0123459])(?P<family>[0235])(?P<case>\d{2})$")

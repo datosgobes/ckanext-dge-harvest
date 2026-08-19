@@ -1,0 +1,248 @@
+{#
+Render the federation report block using the unified action payload.
+
+The snippet intentionally consumes only ``federation_report.rows`` and the
+safe summary fields returned by ``dge_harvest_job_report`` so structured and
+legacy jobs share the same rendering path without exposing ``raw_message`` or
+internal ``details_json`` contents.
+#}
+
+{% set message_type = request.params.get('message_type', '') %}
+{% set sort_by = request.params.get('sort_by', 'count') %}
+{% set sort_dir = request.params.get('sort_dir', 'desc') %}
+{% set page = request.params.get('page', '1') %}
+{% set limit = request.params.get('limit', '20') %}
+{% set base_report_url = h.url_for('harvester.job_show', source=harvest_source.name, id=job.id) %}
+{% set federation_report = h.dge_harvest_job_report(
+  job.id,
+  page=page,
+  limit=limit,
+  message_type=message_type,
+  sort_by=sort_by,
+  sort_dir=sort_dir
+) %}
+{% set current_page = federation_report.page %}
+{% set current_limit = federation_report.limit %}
+{% set total_rows = federation_report.total %}
+{% set total_pages = ((total_rows - 1) // current_limit) + 1 if total_rows > 0 else 1 %}
+
+<section class="federation-report-block mt-6">
+  <div class="clearfix mb-4">
+    <div class="pull-left">
+      <h3 class="mt-0 mb-2">{{ _('Error Report') }}</h3>
+        <div class="federation-report-summary">
+          <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=1, limit=current_limit, sort_by=sort_by, sort_dir=sort_dir) }}"
+            class="label mr-1 chip chip_all{% if not message_type %} active{% endif %}">
+            {{ _('All') }} {{ federation_report.summary.total }}
+          </a>
+
+          <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=1, limit=current_limit, message_type='error', sort_by=sort_by, sort_dir=sort_dir) }}"
+            class="label mr-1 chip chip_error{% if message_type == 'error' %} active{% endif %}">
+            {{ _('Errors') }} {{ federation_report.summary.error }}
+          </a>
+
+          <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=1, limit=current_limit, message_type='warning', sort_by=sort_by, sort_dir=sort_dir) }}"
+            class="label mr-1 chip chip_warning{% if message_type == 'warning' %} active{% endif %}">
+            {{ _('Warnings') }} {{ federation_report.summary.warning }}
+          </a>
+
+          <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=1, limit=current_limit, message_type='info', sort_by=sort_by, sort_dir=sort_dir) }}"
+            class="label chip chip_info{% if message_type == 'info' %} active{% endif %}">
+            {{ _('Infos') }} {{ federation_report.summary.info }}
+          </a>
+        </div>
+    </div>
+    <div class="pull-right federation-report-header-actions">
+      {% if federation_report.guide_url %}
+        <a href="{{ federation_report.guide_url }}" class="btn btn-default btn-small" target="_blank" rel="noopener">
+          {{ _('Validation guide') }} {{federation_report.guide_label}}
+        </a>
+      {% endif %}
+      {% if federation_report.csv_url %}
+        <a href="{{ federation_report.csv_url }}" class="btn btn-default btn-small">
+          {{ _('Export CSV') }}
+        </a>
+      {% endif %}
+    </div>
+  </div>
+
+  {% if federation_report.rows|length == 0 %}
+    <p class="empty">{{ _('No report rows for the selected filter') }}</p>
+  {% else %}
+    <div class="table table-bordered table-hover harvest-error-list federation-report-table">
+
+        <div class="table-header federation-grid">
+          <div class="table-cell"></div>
+          <div class="table-cell">
+            <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=current_page, limit=current_limit, message_type=message_type, sort_by='type', sort_dir='asc' if sort_by != 'type' or sort_dir == 'desc' else 'desc') }}">
+              {{ _('Type') }}
+            </a>
+          </div>
+          <div class="table-cell">
+            <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=current_page, limit=current_limit, message_type=message_type, sort_by='message', sort_dir='asc' if sort_by != 'message' or sort_dir == 'desc' else 'desc') }}">
+              {{ _('Message') }}
+            </a>
+          </div>
+          <div class="table-cell">
+            <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=current_page, limit=current_limit, message_type=message_type, sort_by='count', sort_dir='asc' if sort_by != 'count' or sort_dir == 'desc' else 'desc') }}">
+              {{ _('Amount') }}
+            </a>
+          </div>
+          <div class="table-cell">{{ _('Actions') }}</div>
+        </div>
+
+      <div class="table-body">
+        {% for row in federation_report.rows %}
+        {% set detail_row_id = 'federation-report-detail-' ~ current_page ~ '-' ~ loop.index %}
+        {% set toggle_closed_icon = h.url_for_static('/images/breadcrumb-arrow.svg') %}
+        {% set toggle_opened_icon = h.url_for_static('/images/blue-arrow.svg') %}
+        {% if row.type == 'error' %}
+          {% set level_style = 'background-color:#fbe3e6;color:#b42318;border:1px solid #f4c7cd;' %}
+        {% elif row.type == 'warning' %}
+          {% set level_style = 'background-color:#fff4cc;color:#b37b00;border:1px solid #f4dfa0;' %}
+        {% elif row.type == 'info' %}
+          {% set level_style = 'background-color:#f1f3f5;color:#667085;border:1px solid #dde2e7;' %}
+        {% else %}
+          {% set level_style = 'background-color:#eef2f7;color:#1f3f73;border:1px solid #d8e0ec;' %}
+        {% endif %}
+
+        <div class="federation-report-row federation-grid">
+          <div class="table-cell">
+            <div class="cell-content toggle">
+              <button
+                type="button"
+                class="federation-report-toggle"
+                data-target="{{ detail_row_id }}"
+                data-open-label="{{ toggle_opened_icon }}"
+                data-closed-label="{{ toggle_closed_icon }}"
+                aria-expanded="false">
+                <img class="federation-report-toggle-icon" src="{{ toggle_closed_icon }}" alt="" aria-hidden="true">
+              </button>
+            </div>
+          </div>
+          <div class="table-cell">
+            <div class="cell-content error-label">
+              <span class="label" style="{{ level_style }}">{{ _(row.type)|capitalize }}</span>
+            </div>
+          </div>
+          <div class="table-cell">
+            <div class="cell-content message">
+              {{ row.message }}
+            </div>
+          </div>
+          <div class="table-cell">
+            <div class="cell-content row-count">
+              {{ row.count }}
+            </div>
+          </div>
+          <div class="table-cell">
+            <div class="cell-content see-more">
+              {% if row.actions.more_info_url %}
+              <a href="{{ row.actions.more_info_url }}" target="_blank" rel="noopener" style="background:none;border:none;color:#1f5aa6;padding:0;text-decoration:none;">
+                {{ _('See more') }}
+              </a>
+            {% endif %}
+            </div>
+          </div>
+
+          <div id="{{ detail_row_id }}" class="federation-report-detail-row" style="display:none;">
+              <div class="error well well-small mb-0" style="border-left:4px solid #1f5aa6;">
+                <pre class="mb-0"><span>{{ _('Message') }}:</span> {{ row.message_ui or row.message }}</pre>
+              </div>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+   {% if total_pages > 1 %}
+  <div class="pagination-wrapper federation-report-pagination">
+    <ul class="pagination">
+      <li class="{% if current_page <= 1 %}disabled{% endif %}">
+        {% if current_page <= 1 %}
+          <span>&laquo;</span>
+        {% else %}
+          <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=current_page - 1, limit=current_limit, message_type=message_type, sort_by=sort_by, sort_dir=sort_dir) }}" aria-label="{{ _('Previous') }}">&laquo;</a>
+        {% endif %}
+      </li>
+
+          {% set ns = namespace(last_rendered=0) %}
+
+          {% for page_number in range(1, total_pages + 1) %}
+            {% if page_number == 1
+                  or page_number == total_pages
+                  or (page_number >= current_page - 2 and page_number <= current_page + 2) %}
+
+              {% if ns.last_rendered and page_number > ns.last_rendered + 1 %}
+                <li class="disabled">
+                  <span>...</span>
+                </li>
+              {% endif %}
+
+              <li class="{% if page_number == current_page %}active{% endif %}">
+                {% if page_number == current_page %}
+                  <span>{{ page_number }}</span>
+                {% else %}
+                  <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=page_number, limit=current_limit, message_type=message_type, sort_by=sort_by, sort_dir=sort_dir) }}">{{ page_number }}</a>
+                {% endif %}
+              </li>
+
+              {% set ns.last_rendered = page_number %}
+            {% endif %}
+          {% endfor %}
+
+          <li class="{% if current_page >= total_pages %}disabled{% endif %}">
+            {% if current_page >= total_pages %}
+              <span>&raquo;</span>
+            {% else %}
+              <a href="{{ h.url_for('harvester.job_show', source=harvest_source.name, id=job.id, page=current_page + 1, limit=current_limit, message_type=message_type, sort_by=sort_by, sort_dir=sort_dir) }}" aria-label="{{ _('Next') }}">&raquo;</a>
+            {% endif %}
+          </li>
+        </ul>
+      </div>
+    {% endif %}
+  {% endif %}
+</section>
+
+<script>
+  (function () {
+    var rows = document.querySelectorAll('.federation-report-row');
+
+    rows.forEach(function (row) {
+      row.addEventListener('click', function (event) {
+        if (event.target.closest('a') || event.target.closest('.federation-report-detail-row')) {
+          return;
+        }
+
+        var button = row.querySelector('.federation-report-toggle');
+        if (!button) {
+          return;
+        }
+
+        var targetId = button.getAttribute('data-target');
+        var detailRow = document.getElementById(targetId);
+        if (!detailRow) {
+          return;
+        }
+
+        var isVisible = detailRow.style.display === 'table-row';
+        var nextVisible = !isVisible;
+
+        detailRow.style.display = nextVisible ? 'table-row' : 'none';
+
+        var icon = button.querySelector('.federation-report-toggle-icon');
+        if (icon) {
+          icon.setAttribute(
+            'src',
+            nextVisible
+              ? button.getAttribute('data-open-label')
+              : button.getAttribute('data-closed-label')
+          );
+        }
+
+        button.setAttribute('aria-expanded', nextVisible ? 'true' : 'false');
+      });
+    });
+  })();
+</script>
+

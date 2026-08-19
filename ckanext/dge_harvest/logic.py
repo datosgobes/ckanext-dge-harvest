@@ -32,12 +32,24 @@ from ckan.common import asbool, _
 from ckan.plugins import toolkit
 from ckan.plugins.toolkit import config
 from ckan.logic import NotFound
-from ckanext.harvest.logic.auth import user_is_sysadmin
+from ckanext.harvest.model import HarvestJob
+from ckanext.harvest.logic.auth import get_job_object, user_is_sysadmin
 
 from .export import csv_export_utils
 from .export.rdf_export_generator import RDFExportGenerator
 from .constants import CommonPackageConstants
 from .decorators import log_info
+from ckanext.dge_harvest.services.report.harvest_report_query import (
+    build_legacy_report_response,
+    build_report_csv_url,
+    build_structured_gather_report_response,
+    build_empty_report_response,
+    normalize_report_query,
+    read_legacy_report_data,
+    resolve_report_guide_url,
+    resolve_report_mode,
+)
+from ckanext.dge_harvest.services.report.harvest_job_finish import run_harvest_job_finished_hook
 from jinja2 import Environment, FileSystemLoader
 
 log = logging.getLogger(__name__)
@@ -48,6 +60,69 @@ def dge_harvest_catalog_show(context, data_dict):
     rdf_export_generator = RDFExportGenerator(_get_dcat_ap_es_harvester_config_file(), False)
     return rdf_export_generator.dge_harvest_catalog_show_rdf(context, data_dict)
 
+
+@toolkit.side_effect_free
+@log_info
+def dge_harvest_job_report(context, data_dict):
+    """Return the current federation report payload for one harvest job.
+
+    The action validates the job and query parameters, detects whether the job
+    must be served in ``structured`` or ``legacy`` mode and, for structured
+    jobs, returns the paginated rows already materialized in
+    ``dge_harvest_report_row``.
+    """
+    toolkit.check_access("dge_harvest_job_report", context, data_dict)
+
+    harvest_job_id = (data_dict or {}).get("id")
+    if not harvest_job_id:
+        raise toolkit.ValidationError({"id": ["Missing value"]})
+
+    harvest_job = (
+        context["model"].Session.query(HarvestJob)
+        .filter(HarvestJob.id == harvest_job_id)
+        .first()
+    )
+    if harvest_job is None:
+        raise NotFound("Harvest job not found")
+
+    try:
+        query = normalize_report_query(data_dict)
+    except ValueError as exc:
+        raise toolkit.ValidationError({"__type": [str(exc)]})
+
+    mode = resolve_report_mode(
+        harvest_job_id=harvest_job_id,
+        session=context["model"].Session,
+    )
+    if mode == "structured":
+        response = build_structured_gather_report_response(
+            harvest_job_id=harvest_job_id,
+            query=query,
+            session=context["model"].Session,
+        )
+    else:
+        legacy_report_data = read_legacy_report_data(
+            harvest_job_id=harvest_job_id,
+            context=context,
+        )
+        response = build_legacy_report_response(
+            harvest_job_id=harvest_job_id,
+            query=query,
+            legacy_report_data=legacy_report_data,
+        )
+    response["guide_url"], response["guide_label"] = resolve_report_guide_url(
+        harvest_job_id=harvest_job_id,
+        fallback_source_type=harvest_job.source.type,
+        fallback_source_config=getattr(harvest_job.source, "config", None),
+    )
+    response["csv_url"] = build_report_csv_url(
+        source_name=harvest_job.source_id,
+        harvest_job_id=harvest_job_id,
+        query=query,
+    )
+    return response
+
+#RDF EDP SDA-667
 @log_info
 def dge_harvest_catalog_show_edp(context, data_dict):
     rdf_export_generator = RDFExportGenerator(_get_dcat_ap_es_harvester_config_file(), True)
@@ -141,7 +216,7 @@ def _dge_harvest_send_email(from_addr, to_addrs, msg):
         smtp_user = None
         smtp_password = None
     else:
-        smtp_server = config.get('smtp.server', '')
+        smtp_server = config.get('smtp.server', 'localhost')
         smtp_starttls = asbool(
                         config.get('smtp.starttls'))
         smtp_user = config.get('smtp.user')
@@ -251,6 +326,29 @@ def dge_harvest_source_email_job_finished(context, data_dict):
         log.exception(f'{method_log_prefix} Exception sending email.')
     finally:
         log.debug(f'{method_log_prefix} End method.')
+
+
+def dge_harvest_job_finished(context, data_dict):
+    """Run extension-specific close-time processing for one finished job.
+
+    This action is invoked from the harvest job closing flow. It separates
+    report consolidation concerns from the notification path while preserving
+    the existing organization e-mail behavior.
+
+    Args:
+        context (dict): CKAN action context.
+        data_dict (dict): Payload containing ``source_id`` and ``job_id``.
+
+    Returns:
+        dict: Minimal consolidation result for the finished job.
+    """
+    toolkit.check_access('dge_harvest_job_finished', context, data_dict)
+    return run_harvest_job_finished_hook(
+        context=context,
+        source_id=data_dict.get('source_id'),
+        job_id=data_dict.get('job_id'),
+        session=context.get('session'),
+    )
 
 def dge_harvest_get_running_harvest_jobs(context, data_dict):
     '''
@@ -367,3 +465,33 @@ def dge_harvest_is_sysadmin(context, data_dict):
         return {'success': False, 'msg': 'Only sysadmins can do this operation'}
     else:
         return {'success': True}
+
+
+def dge_harvest_job_report_auth(context, data_dict):
+    """Authorize access to the unified federation report for one harvest job.
+
+    The report is scoped to a single harvest job and reuses the same security
+    rule as ``harvest_job_show`` from ``ckanext-harvest``: a user can read the
+    report only if she can update the parent harvest source.
+
+    Args:
+        context (dict): CKAN action context.
+        data_dict (dict): Action payload containing at least the harvest job
+            identifier in ``id``.
+
+    Returns:
+        dict: CKAN authorization result structure.
+    """
+    user = context.get('user')
+    job = get_job_object(context, data_dict)
+
+    try:
+        toolkit.check_access('harvest_source_update', context, {'id': job.source.id})
+        return {'success': True}
+    except toolkit.NotAuthorized:
+        return {
+            'success': False,
+            'msg': toolkit._(
+                'User {0} not authorized to see federation report for source {1}'
+            ).format(user, job.source.id),
+        }

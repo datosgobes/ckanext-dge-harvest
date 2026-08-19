@@ -26,6 +26,6 @@ from . import gather_stage_validation_utils
 from .gather_stage_validation import GatherStageValidation, GatherStageValidationException
 from . import harvester_utils
 from . import import_stage_utils
-from .rdf_validator import RdfValidator, DcatApEsRdfValidator, RdfValidatorException
+from .rdf_validator import RdfValidator, DcatApEsRdfValidator
 from .shacl_validator import ShaclValidator, ShaclValidatorException
 from .vocabulary_validator import VocabularyValidator, VocabularyValidatorException

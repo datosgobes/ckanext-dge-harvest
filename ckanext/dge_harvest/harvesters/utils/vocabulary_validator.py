@@ -21,7 +21,7 @@ import logging
 import inspect
 from rdflib.namespace import SKOS
 from rdflib import Graph, URIRef, BNode, Literal
-from typing import List, Tuple, Union
+from typing import List, Optional, Tuple, Union
 from ...rdf_store  import RDFStoreHelper
 from ...decorators import log_debug, log_info
 from ...utils import safe_n3_uriref
@@ -132,9 +132,7 @@ class VocabularyValidator():
             return False
         
         query = f'''ASK {{ GRAPH {safe_n3_uriref(self.vocabulary_graph_name)} {{ 
-                        {safe_n3_uriref(vocabulary_element_uri)} {safe_n3_uriref(SKOS.inScheme)} {safe_n3_uriref(vocabulary_uri)} . 
-                        {{ {safe_n3_uriref(vocabulary_element_uri)} {safe_n3_uriref(SKOS.topConceptOf)}  {safe_n3_uriref(vocabulary_uri)} .  }} 
-                        UNION {{ {safe_n3_uriref(vocabulary_uri)} {safe_n3_uriref(SKOS.hasTopConcept)} {safe_n3_uriref(vocabulary_element_uri)} . }} 
+                        {safe_n3_uriref(vocabulary_element_uri)} {safe_n3_uriref(SKOS.inScheme)} {safe_n3_uriref(vocabulary_uri)} .  
                         }} }}'''
         result = self.rdf_store.get_result_of_ask_query(query)
         log.debug(f'{method_log_prefix} {vocabulary_element_uri} is {"not" if not result else ""} in {vocabulary_uri}')
@@ -172,31 +170,35 @@ class VocabularyValidator():
                 continue
             elif str(o) in self.elements_unbelonging_to_vocabulary.get(vocabulary_uri, set()):
                 # wrong value; write message
-                messages.append(f'{str(o)} is not an element of {vocabulary_uri} vocabulary. It is not a valid value for {str(p)}.')
+                # messages.append(f'{str(o)} is not an element of {vocabulary_uri} vocabulary. It is not a valid value for {str(p)}.')
+                messages.append(f'{str(o)} no es un elemento del vocabulario {vocabulary_uri}. No es un elemento válido para {str(p)}.')
             else:
                 # query to sparql
                 log.debug(f'{method_log_prefix} consult to .... {self.vocabulary_graph_name}')
                 if self.vocabulary_graph_name:
-                    self._check_vocabulary_element(str(vocabulary_uri), str(o), messages, str(p))
+                    message = self._check_vocabulary_element(str(vocabulary_uri), str(o), str(p))
+                    if message:
+                        messages.append(message)
         return messages
 
-    def _check_vocabulary_element(self, vocabulary_uri, vocabulary_element_uri, messages, metadata_uri):
-        if not messages:
-            messages = []
+    def _check_vocabulary_element(self, vocabulary_uri, vocabulary_element_uri, metadata_uri) -> Optional[str]:
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         exist = self.check_element_of_vocabulary_in_rdf_store(vocabulary_uri, vocabulary_element_uri)
         log.debug(f'{method_log_prefix} exist.... {exist}')
         if exist:
             if self.elements_belonging_to_vocabulary.get(vocabulary_uri) is None:
                 self.elements_belonging_to_vocabulary[vocabulary_uri] = set()
-            self.elements_belonging_to_vocabulary[vocabulary_uri].add(vocabulary_uri)
+            self.elements_belonging_to_vocabulary[vocabulary_uri].add(vocabulary_element_uri)
             log.debug(f'{method_log_prefix} elements_belonging_to_vocabulary.... {self.elements_belonging_to_vocabulary}')
         else:
             if self.elements_unbelonging_to_vocabulary.get(vocabulary_uri) is None:
                 self.elements_unbelonging_to_vocabulary[vocabulary_uri] = set()
-            self.elements_unbelonging_to_vocabulary[vocabulary_uri].add(vocabulary_uri)
-            messages.append(f'{vocabulary_element_uri} is not an element of {vocabulary_uri} vocabulary. It is not a valid value for {metadata_uri}.')
+            self.elements_unbelonging_to_vocabulary[vocabulary_uri].add(vocabulary_element_uri)
+            #message = f'{vocabulary_element_uri} is not an element of {vocabulary_uri} vocabulary. It is not a valid value for {metadata_uri}.'
+            message = f'{vocabulary_element_uri} no es un elemento del vocabulario {vocabulary_uri}. No es un valor válido para el metadato {metadata_uri}.'
             log.debug(f'{method_log_prefix} elements_unbelonging_to_vocabulary.... {self.elements_unbelonging_to_vocabulary}')
+            return message
+        return None
 
     @log_info
     def check_vocabularies(self, graph_to_validate:Graph, vocabularies_metadata_to_check:dict[str,List[str]]={}) -> List[str]:

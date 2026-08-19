@@ -17,7 +17,6 @@
 
 # coding=utf-8
 import logging
-import traceback
 import inspect
 import re
 from typing import List
@@ -27,7 +26,7 @@ from ..harvester_config_reader import HarvesterConfigReader
 from ..constants.dcat_ap_es_constants import DCATAPESConfigConstants as ConfigConstants
 from ..constants.dcat_ap_es_constants import NAMESPACES, RDF_PREFIX, DCT_PREFIX, DCAT_PREFIX
 from ..helpers import dge_harvest_organizations_available
-from ..decorators import log_debug, log_info
+from ..decorators import log_debug
 
 log = logging.getLogger(__name__)
 

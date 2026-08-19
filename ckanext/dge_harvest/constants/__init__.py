@@ -22,6 +22,7 @@ from .constants import ConfigConstants
 from .constants import PrefixConstants
 from .constants import CatalogConstants
 from .constants import CommonPackageConstants    
+from .constants import HarvestMessageDetailConstants
 from .constants import DatasetConstants
 from .constants import DataserviceConstants
 from .constants import HarvesterConstants

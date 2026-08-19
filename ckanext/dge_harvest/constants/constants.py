@@ -89,6 +89,8 @@ class CommonPackageConstants:
     KEY_PUBLISHER_NAME = 'publisher_name'
     KEY_ERRORS = 'errors'
     KEY_WARNINGS = 'warnings'
+    KEY_ERROR_DETAILS = 'error_details'
+    KEY_WARNING_DETAILS = 'warning_details'
     KEY_EXTRAS_GUID = 'guid'
     KEY_EXTRAS_HVD = 'hvd'
     KEY_EXTRAS_CKAN_URI = 'ckan_uri'
@@ -106,6 +108,16 @@ class CommonPackageConstants:
     KEY_TYPE_DATASERVICE_VALUE = 'dataservice'
     KEY_VISIBILIDAD = 'visibilidad'
     VALUE_VISIBILIDAD = 'publico'
+
+
+class HarvestMessageDetailConstants:
+    KEY_LEVEL = 'level'
+    KEY_SCOPE = 'scope'
+    KEY_MESSAGE = 'message'
+    KEY_RESOURCE_URI = 'resource_uri'
+    KEY_PREFIX = 'prefix'
+    KEY_EXCEPTION = 'exception'
+
 
 class DatasetConstants(CommonPackageConstants):
     # Keys of dataset dictionary
@@ -137,13 +149,8 @@ class DataserviceConstants(CommonPackageConstants):
 
 class HarvesterConstants:
     #ERROR ACCESS, DOWNLOAD AND PARSER TO RDF URL
-    CATALOG_ACCESS_ERROR_URL = '[Error al acceder al cat\u00E1logo en la URL: {}] {}. El feed no ha sido procesado.'
-    CATALOG_ACCESS_ERROR = '[Error al acceder al cat\u00E1logo. {}] El feed no ha sido procesado.'
-    CATALOG_DOWNLOAD_ERROR_URL = '[Error al descargar al cat\u00E1logo en la URL: {}] {}. El feed no ha sido procesado.'
-    CATALOG_DOWNLOAD_ERROR = '[Error al descargar el cat\u00E1logo] {}. El feed no ha sido procesado.'
     CATALOG_PARSER_ERROR_URL = '[Error al parsear el cat\u00E1logo en la URL: {}] {}. El feed no ha sido procesado.'
     CATALOG_PARSER_ERROR = '[Error al parsear el cat\u00E1logo dcat] {}. El feed no ha sido procesado.'
-    CATALOG_FILE_SOFT_LIMIT_INFO = '[INFO] El RDF federado ha sobrepasado el umbral advertido de {} MB. Es necesario paginar el fichero para evitar futuros fallos en la federaci\u00F3n al superar el tama\u00F1o soportado.'
 
     UNEXPECTED_ERROR = '{}: {}'
 
@@ -159,6 +166,10 @@ class HarvesterConstants:
     SUFFIX_GRAPH_NAME_OF_PREVIOUS_HARVEST = f'{GRAPH_NAME_SEPARATOR_CHARACTER}old'
 
     FAILED_REQUESTS_HEAD_STATUS_CODES_FOR_REQUESTS_GET = [405, 400, 404, 403]
+    SOURCE_URL_AT_RUN = 'source_url_at_run'
+    SOURCE_TYPE_AT_RUN = 'source_type_at_run'
+    SOURCE_CONFIG_AT_RUN = 'source_config_at_run'
+    SOURCE_OWNER_ORG_AT_RUN = 'source_owner_org_at_run'
 
 class ExportCatalogConstants:
 
