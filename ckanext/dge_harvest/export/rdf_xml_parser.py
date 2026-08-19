@@ -18,6 +18,7 @@
 # coding=utf-8
 import logging
 import inspect
+import time
 from typing import List
 from ckan.plugins.toolkit import config
 import xml.etree.ElementTree as ET
@@ -26,14 +27,14 @@ from ..constants import DCATAPESConfigConstants as ConfigConstants, DCATAPESPref
 from .rdf_xml_parser_base import RDFXmlParserBase, RDFXmlParserConstants
 from ..harvester_config_reader import HarvesterConfigReader
 from rdflib import Graph, URIRef, Literal
-from ..decorators import log_debug, log_info
+from ..decorators import log_debug
 log = logging.getLogger(__name__)
 
 """
     rdf: string in rdf format getting from serialized a block of catalogs, datasets and dataservices and their metadata
 """
 class RDFXmlParser(RDFXmlParserBase):
-    @log_info
+    @log_debug
     def __init__(self, filepath_rdf_root_catalog:str, config_reader:HarvesterConfigReader, template:str, available_organizations: dict[str, List[str]] = None):
         super().__init__(filepath_rdf_root_catalog, config_reader, available_organizations)
         self._clean_files()
@@ -48,18 +49,30 @@ class RDFXmlParser(RDFXmlParserBase):
         self._subcatalogs_of_main_catalog = set() # subcatalogs included in main catalog as dct:haPart
 
 
-    @log_info
     def write_catalog_rdf(self):    
         """
         Write catalog in _filepath_rdf getting the information from _filepath_datasets_dataservices and _filepath_miscelaneous_metadata.
         Use the first block of datasets generated as template: _filepath_rdf_template.
         """
+        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
+        start = time.time()
+        log.info(
+            f'{method_log_prefix} Writing final RDF catalog. '
+            f'main_subcatalogs={len(self._subcatalogs_of_main_catalog)}, '
+            f'subcatalog_nodes={self._subcatalogs_size}, datasets={self._datasets_size}, dataservices={self._dataservices_size}'
+        )
         self._append_organization_metadata()
         self._complete_namespaces_and_subcatalogs()
         self._set_close_tag_in_datasets_and_dataservices_files()
         self._open_files_process_catalog()
         self._write_catalog_in_file()
         self._close_files()
+        elapsed_ms = int((time.time() - start) * 1000)
+        log.info(
+            f'{method_log_prefix} Final RDF catalog written to {self._filepath_final_rdf} in {elapsed_ms} ms. '
+            f'main_subcatalogs={len(self._subcatalogs_of_main_catalog)}, '
+            f'subcatalog_nodes={self._subcatalogs_size}, datasets={self._datasets_size}, dataservices={self._dataservices_size}'
+        )
 
     @log_debug
     def _complete_namespaces_and_subcatalogs(self):
@@ -92,7 +105,7 @@ class RDFXmlParser(RDFXmlParserBase):
         ET.indent(_root)
         _tree.write(file_or_filename=_filepath, encoding="utf-8", xml_declaration=True)
 
-    @log_info
+    @log_debug
     def append_subcatalog(self, rdf, subcatalog_uri):
         """
         Refactor rdf and take only subcatalogs and append a block of datasets into self._filepath_metadata.
@@ -108,7 +121,7 @@ class RDFXmlParser(RDFXmlParserBase):
         self._append_metadata_data_block_file(subcatalog)
         self._close_files()
 
-    @log_info
+    @log_debug
     def append_datasets_and_dataservices(self, rdf):
         """
         Refactor rdf and take only datasets and dataservices and append a block of datasets into self._filepath_metadata.
@@ -129,7 +142,7 @@ class RDFXmlParser(RDFXmlParserBase):
         self._write_line(self._file_rdf_root_catalog_template, processed_catalog)
         self._close_files()
 
-    @log_info
+    @log_debug
     def initialize_internal_subcatalog_rdf_template(self, catalog, catalog_uri):
         """
         Write catalog in _filepath_rdf_template.
@@ -160,7 +173,7 @@ class RDFXmlParser(RDFXmlParserBase):
                 element = _root_element.find(f".//*[@rdf:about='{rdf_about_value}']", self._namespaces)
                 _root_element.remove(element) 
             except ValueError as e:
-                log.warn(f'{method_log_prefix} Error removing element with rdf_about = {rdf_about_value}. Exception {type(e)}: {str(e)}')
+                log.warning(f'{method_log_prefix} Error removing element with rdf_about = {rdf_about_value}. Exception {type(e)}: {str(e)}')
         processed_catalog = ET.tostring(_root_element).decode(RDFXmlParserConstants.ENCODING)
         return processed_catalog
 

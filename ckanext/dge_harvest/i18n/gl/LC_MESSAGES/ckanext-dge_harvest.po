@@ -633,3 +633,78 @@ msgstr ""
 #: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/harvesters/utils/shacl_results_formatter.py
 msgid "SHACL INFO"
 msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Federation report"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Validation guide"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Export CSV"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "All"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Errors"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Warnings"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Info"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Error"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Warning"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Infos"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Info"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Amount"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "Actions"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "No report rows for the selected filter"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/federation_report_block.html
+msgid "See more"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/job_details.html
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/source/job/list.html
+msgid "added"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/job_details.html
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/source/job/list.html
+msgid "updated"
+msgstr ""
+
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/snippets/job_details.html
+#: /ckanext/ckanext-dge-harvest/ckanext/dge_harvest/templates/source/job/list.html
+msgid "deleted"
+msgstr ""

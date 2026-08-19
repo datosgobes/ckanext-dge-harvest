@@ -23,19 +23,37 @@ import os
 import gettext
 from ckantoolkit import config
 from rdflib import Graph,Literal, BNode, URIRef
-from rdflib.namespace import Namespace, RDF, SH
-from typing import List, Tuple, Set, Optional
+from rdflib.namespace import Namespace, RDF, RDFS, SH, FOAF
+from typing import List, Tuple, Set, Optional, Dict, Any
 from ...decorators import log_debug
 from ...constants.dcat_ap_es_constants import NAMESPACES
 
 log = logging.getLogger(__name__)
 
-"""
-Module to build human-readable or serialized outputs from SHACL results obtained with pySHACL.
-Does not perform validation, only formats the results graph.
+"""Utilities to extract and format SHACL validation results.
+
+The module does not execute SHACL validation itself. It transforms the results
+graph returned by pySHACL into either a human-readable text representation or
+into a richer neutral structure that can later be adapted to other reporting
+models.
 """
 USE_PREFIX = None
 MAX_DEPTH = 3
+SHAPE_TEXT_PREDICATES = (SH.name, SH.description, RDFS.label)
+SHAPE_CONSTRAINT_PREDICATES = {
+    SH.minCount,
+    SH.maxCount,
+    SH.nodeKind,
+    SH.datatype,
+    SH.pattern,
+    SH.hasValue,
+    SH["class"],
+    SH["in"],
+    SH["or"],
+    SH.uniqueLang,
+    SH.closed,
+    SH.languageIn,
+}
 # -------------------------------------------------------------------------
 # Report language settings
 # -------------------------------------------------------------------------
@@ -185,6 +203,30 @@ def severity_label(severity_iri, gt):
         return f"[SHACL {s.split('#')[-1].upper()}]"
     return f"[{gt(label)}]"
 
+
+def get_severity_info(severity_iri):
+    """Return a neutral severity structure from one SHACL severity term."""
+    if not severity_iri:
+        return {
+            "iri": None,
+            "name": "Info",
+            "level": "info",
+        }
+
+    severity_text = str(severity_iri)
+    severity_name = severity_text.split("#")[-1]
+    level = "info"
+    if severity_name == "Violation":
+        level = "error"
+    elif severity_name == "Warning":
+        level = "warning"
+
+    return {
+        "iri": severity_text,
+        "name": severity_name,
+        "level": level,
+    }
+
 def get_metadata_or_class(uri_ref: str) -> Tuple[str, str]:
     """
     Extracts the namespace, namespace prefix, and the local name
@@ -214,6 +256,150 @@ def get_metadata_or_class(uri_ref: str) -> Tuple[str, str]:
     # Get the namespace prefix if registered
     namespace_prefix = next((k for k, v in NAMESPACES.items() if v == namespace), None)
     return namespace_prefix, metadata_name
+
+
+def serialize_rdf_term(term, namespaces=None, use_prefixes=None) -> Optional[Dict[str, Any]]:
+    """Serialize one RDF term into a neutral dictionary structure."""
+    if term is None:
+        return None
+
+    namespaces = namespaces or NAMESPACES
+    display = format_rdf_term(term, namespaces=namespaces, use_prefixes=use_prefixes)
+
+    if isinstance(term, URIRef):
+        namespace_prefix, local_name = get_metadata_or_class(str(term))
+        return {
+            "term_type": "uri",
+            "value": str(term),
+            "display": display,
+            "namespace_prefix": namespace_prefix,
+            "local_name": local_name,
+        }
+
+    if isinstance(term, Literal):
+        return {
+            "term_type": "literal",
+            "value": str(term),
+            "display": display,
+            "language": term.language,
+            "datatype": str(term.datatype) if term.datatype else None,
+        }
+
+    if isinstance(term, BNode):
+        return {
+            "term_type": "bnode",
+            "value": str(term),
+            "display": display,
+        }
+
+    return {
+        "term_type": "text",
+        "value": str(term),
+        "display": display,
+    }
+
+
+def _is_rdf_list_node(graph: Graph, node) -> bool:
+    """Return whether ``node`` is the head of an RDF collection."""
+    return isinstance(node, BNode) and (
+        (node, RDF.first, None) in graph or (node, RDF.rest, None) in graph
+    )
+
+
+def _serialize_rdf_collection(graph: Graph, node) -> List[Dict[str, Any]]:
+    """Serialize an RDF collection into a plain Python list structure."""
+    items = []
+    current = node
+    seen = set()
+    while current and current != RDF.nil and current not in seen:
+        seen.add(current)
+        first = graph.value(current, RDF.first)
+        if first is not None:
+            items.append(_serialize_object_structure(graph, first, max_depth=0))
+        current = graph.value(current, RDF.rest)
+    return items
+
+
+def _serialize_shacl_path(graph: Graph, path_node) -> Optional[Dict[str, Any]]:
+    """Serialize simple and compound SHACL paths into a neutral structure."""
+    if path_node is None:
+        return None
+    if isinstance(path_node, URIRef):
+        return {
+            "path_type": "predicate",
+            "term": serialize_rdf_term(path_node),
+        }
+    if _is_rdf_list_node(graph, path_node):
+        return {
+            "path_type": "sequence",
+            "items": _serialize_rdf_collection(graph, path_node),
+        }
+    if isinstance(path_node, BNode):
+        for predicate, path_type in (
+            (SH.inversePath, "inverse"),
+            (SH.alternativePath, "alternative"),
+            (SH.zeroOrMorePath, "zero_or_more"),
+            (SH.oneOrMorePath, "one_or_more"),
+            (SH.zeroOrOnePath, "zero_or_one"),
+        ):
+            nested = graph.value(path_node, predicate)
+            if nested is not None:
+                if predicate == SH.alternativePath and _is_rdf_list_node(graph, nested):
+                    return {
+                        "path_type": path_type,
+                        "items": _serialize_rdf_collection(graph, nested),
+                    }
+                return {
+                    "path_type": path_type,
+                    "item": _serialize_shacl_path(graph, nested),
+                }
+    return {
+        "path_type": "term",
+        "term": serialize_rdf_term(path_node),
+    }
+
+
+def _serialize_object_structure(
+    graph: Graph,
+    obj,
+    max_depth: int,
+    lang_preference: str = "en",
+    _seen: Optional[Set] = None,
+):
+    """Serialize one object node, expanding lists and nested shapes when useful."""
+    object_data = {
+        "term": serialize_rdf_term(obj),
+    }
+    if _is_rdf_list_node(graph, obj):
+        object_data["collection"] = _serialize_rdf_collection(graph, obj)
+        return object_data
+    if isinstance(obj, BNode) and max_depth > 0:
+        object_data["nested_shape"] = extract_shape_structure(
+            graph,
+            obj,
+            lang_preference=lang_preference,
+            max_depth=max_depth - 1,
+            _seen=_seen,
+        )
+    return object_data
+
+
+def _extract_multilingual_text_values(objects, lang_preference: str):
+    """Return raw multilingual values plus the preferred text selection."""
+    messages = []
+    literals = []
+    for obj in objects:
+        if not isinstance(obj, Literal):
+            continue
+        literals.append(obj)
+        messages.append(
+            {
+                "value": str(obj),
+                "language": obj.language,
+                "datatype": str(obj.datatype) if obj.datatype else None,
+            }
+        )
+    return messages, extract_message(literals, lang_preference)
 
 # -------------------------------------------------------------------------
 # Generic building block of shapes (sourceShape)
@@ -354,7 +540,212 @@ def _format_objects_for_predicate(
     return lines
 
 
-def format_validation_result_text(graph: Graph, data_graph:Graph, result_node, gt, indent:int=0, lang_preference:str="en"):
+def extract_shape_structure(
+    graph: Graph,
+    shape_node,
+    lang_preference: str = "en",
+    max_depth: int = 1,
+    _seen: Optional[Set] = None,
+) -> Dict[str, Any]:
+    """Extract a neutral recursive structure for one SHACL shape node."""
+    _seen = _seen or set()
+
+    shape_data = {
+        "node": serialize_rdf_term(shape_node),
+        "messages": [],
+        "name": None,
+        "label": None,
+        "description": None,
+        "severity": None,
+        "path": None,
+        "more_info_urls": [],
+        "primary_more_info_url": None,
+        "constraint_features": [],
+        "properties": [],
+    }
+
+    if isinstance(shape_node, BNode):
+        if shape_node in _seen:
+            shape_data["cyclic_reference"] = True
+            return shape_data
+        _seen.add(shape_node)
+
+    grouped = _group_predicate_objects(graph, shape_node)
+    ordered_predicates = sorted(grouped.keys(), key=lambda p: (p != SH.message, str(p)))
+
+    for predicate in ordered_predicates:
+        predicate_data = {
+            "predicate": serialize_rdf_term(predicate),
+            "objects": [],
+        }
+        objects = grouped[predicate]
+        if predicate in SHAPE_TEXT_PREDICATES:
+            text_values, preferred_text = _extract_multilingual_text_values(
+                objects,
+                lang_preference,
+            )
+            field_name = (
+                "name" if predicate == SH.name else
+                "description" if predicate == SH.description else
+                "label"
+            )
+            shape_data[field_name] = preferred_text
+            predicate_data["text_values"] = text_values
+        if predicate == SH.message:
+            shape_data["messages"], shape_data["message_text"] = _extract_multilingual_text_values(
+                objects,
+                lang_preference,
+            )
+        if predicate == SH.severity:
+            shape_data["severity"] = get_severity_info(objects[0]) if objects else None
+        if predicate == SH.path and objects:
+            shape_data["path"] = _serialize_shacl_path(graph, objects[0])
+        if predicate in SHAPE_CONSTRAINT_PREDICATES:
+            predicate_name = predicate_data["predicate"].get("local_name")
+            if predicate_name and predicate_name not in shape_data["constraint_features"]:
+                shape_data["constraint_features"].append(predicate_name)
+
+        for obj in objects:
+            object_data = _serialize_object_structure(
+                graph,
+                obj,
+                max_depth=max_depth,
+                lang_preference=lang_preference,
+                _seen=_seen,
+            )
+            if predicate == FOAF.page and isinstance(obj, URIRef):
+                shape_data["more_info_urls"].append(str(obj))
+            predicate_data["objects"].append(object_data)
+        shape_data["properties"].append(predicate_data)
+
+    if shape_data["more_info_urls"]:
+        shape_data["primary_more_info_url"] = shape_data["more_info_urls"][0]
+    if "message_text" not in shape_data:
+        shape_data["message_text"] = None
+    return shape_data
+
+
+def _build_dcat_ap_es_links(data_graph: Graph, values: dict) -> List[str]:
+    """Build documentation URLs inferred from focus node type and result path."""
+    focus_node = values["focus_node"]
+    result_path = values["result_path"]
+    if not (focus_node and result_path):
+        return []
+
+    dcat_ap_es_page = config.get("ckanext.dge_harvest.dge_dcat_ap_es.url", None)
+    dcat_ap_es_prefix = config.get("ckanext.dge_harvest.dge_dcat_ap_es.prefix", "")
+    if not dcat_ap_es_page:
+        return []
+
+    focus_types = list(data_graph.objects(focus_node, RDF.type))
+    if not focus_types:
+        return []
+
+    url_list = []
+    for focus_type in focus_types:
+        class_prefix, class_name = get_metadata_or_class(focus_type)
+        meta_prefix, meta_name = get_metadata_or_class(result_path)
+        if all([class_prefix, class_name, meta_prefix, meta_name]):
+            url = (
+                f"{dcat_ap_es_page}#"
+                f"{dcat_ap_es_prefix}-{class_prefix.lower()}_{class_name.lower()}"
+                f"-{meta_prefix.lower()}_{meta_name.lower()}"
+            )
+            url_list.append(url)
+
+    return url_list
+
+
+def extract_validation_result_data(
+    graph: Graph,
+    data_graph: Graph,
+    result_node,
+    lang_preference: str = "en",
+) -> Dict[str, Any]:
+    """Extract one SHACL ``ValidationResult`` into a rich neutral structure."""
+    values = _extract_result_values(graph, result_node)
+    source_shapes = [
+        extract_shape_structure(
+            graph,
+            shape,
+            lang_preference=lang_preference,
+            max_depth=MAX_DEPTH,
+        )
+        for shape in values["source_shapes"]
+    ]
+
+    details = [
+        extract_validation_result_data(
+            graph,
+            data_graph,
+            detail,
+            lang_preference=lang_preference,
+        )
+        for detail in graph.objects(result_node, SH.detail)
+    ]
+    more_info_urls = _collect_more_info_urls(source_shapes)
+
+    return {
+        "result_node": serialize_rdf_term(result_node),
+        "severity": get_severity_info(values["severity"]),
+        "message_text": extract_message(values["result_messages"], lang_preference),
+        "result_messages": [
+            serialize_rdf_term(message) for message in values["result_messages"]
+        ],
+        "focus_node": serialize_rdf_term(values["focus_node"]),
+        "result_path": serialize_rdf_term(values["result_path"]),
+        "value": serialize_rdf_term(values["value"]),
+        "source_constraints": [
+            serialize_rdf_term(constraint)
+            for constraint in values["source_constraints"]
+        ],
+        "source_shapes": source_shapes,
+        "more_info_urls": more_info_urls,
+        "primary_more_info_url": more_info_urls[0] if more_info_urls else None,
+        "documentation_urls": _build_dcat_ap_es_links(data_graph, values),
+        "details": details,
+    }
+
+
+def extract_shacl_validation_results(
+    results_graph: Graph,
+    data_graph: Graph,
+    lang_preference: Optional[str] = None,
+) -> List[Dict[str, Any]]:
+    """Extract a rich neutral structure for all SHACL validation results."""
+    lang_preference = lang_preference or _get_results_language()
+    return [
+        extract_validation_result_data(
+            results_graph,
+            data_graph,
+            result,
+            lang_preference=lang_preference,
+        )
+        for result in results_graph.subjects(RDF.type, SH.ValidationResult)
+    ]
+
+
+def _collect_more_info_urls(source_shapes: List[Dict[str, Any]]) -> List[str]:
+    """Collect de-duplicated ``foaf:page`` URLs from extracted shape nodes."""
+    urls = []
+    for shape in source_shapes:
+        for url in shape.get("more_info_urls", []):
+            if url not in urls:
+                urls.append(url)
+        for predicate_data in shape.get("properties", []):
+            for obj in predicate_data.get("objects", []):
+                nested_shape = obj.get("nested_shape")
+                if not nested_shape:
+                    continue
+                for url in _collect_more_info_urls([nested_shape]):
+                    if url not in urls:
+                        urls.append(url)
+    return urls
+
+# -------------------------------------------------------------------------
+# Formateo principal (texto legible que usa siempre gt/lang del informe)
+# -------------------------------------------------------------------------
+def format_validation_result_text(graph: Graph, data_graph:Graph, result_node, gt, indent:int=0, lang_preference:str="es"):
     """
     Build a human-readable textual representation of a SHACL ValidationResult.
 
@@ -452,32 +843,7 @@ def _append_shape_definitions(lines, prefix, gt, graph, values, lang_preference,
 
 def _append_dcat_ap_es_links(lines, prefix, gt, data_graph, values):
     """Append DCAT-AP-ES metadata documentation URLs based on RDF types and result path."""
-    focus_node = values["focus_node"]
-    result_path = values["result_path"]
-    if not (focus_node and result_path):
-        return
-
-    dcat_ap_es_page = config.get("ckanext.dge_harvest.dge_dcat_ap_es.url", None)
-    dcat_ap_es_prefix = config.get("ckanext.dge_harvest.dge_dcat_ap_es.prefix", "")
-    if not dcat_ap_es_page:
-        return
-
-    focus_types = list(data_graph.objects(focus_node, RDF.type))
-    if not focus_types:
-        return
-
-    url_list = []
-    for focus_type in focus_types:
-        class_prefix, class_name = get_metadata_or_class(focus_type)
-        meta_prefix, meta_name = get_metadata_or_class(result_path)
-        if all([class_prefix, class_name, meta_prefix, meta_name]):
-            url = (
-                f"{dcat_ap_es_page}#"
-                f"{dcat_ap_es_prefix}-{class_prefix.lower()}_{class_name.lower()}"
-                f"-{meta_prefix.lower()}_{meta_name.lower()}"
-            )
-            url_list.append(url)
-
+    url_list = _build_dcat_ap_es_links(data_graph, values)
     if url_list:
         lines.append(f"{prefix}  {gt('See more info at')}: {', '.join(url_list)}")
 

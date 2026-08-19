@@ -21,6 +21,7 @@ import logging
 import uuid
 import inspect
 import sqlalchemy as sa
+from functools import partial
 from typing import List, Tuple
 from rdflib import URIRef, Literal, Graph
 import ckan.logic as logic
@@ -30,7 +31,7 @@ import ckan.lib.plugins as lib_plugins
 from ckantoolkit import h
 from ckanext.dcat.interfaces import IDCATRDFHarvester
 from ckanext.harvest.logic.schema import unicode_safe
-from ckanext.harvest.model import (HarvestJob, HarvestObject, HarvestObjectError, HarvestGatherError)
+from ckanext.harvest.model import HarvestJob, HarvestObject
 from ...constants import (DCATAPESDatasetConstants as DatasetConstants,
                                                DCATAPESDistributionConstants as DistributionConstants,
                                                DCATAPESHarvesterConstants as HarvesterConstants,
@@ -40,10 +41,8 @@ from ...rdf_store  import RDFStoreComplete, RDFStoreDelete
 from .harvester_utils import _get_package_info
 from ...utils import generate_graph_uri_from_job, dge_harvest_resource_uri, dge_harvest_dataservice_uri, dge_harvest_dataset_uri
 from ...decorators import log_debug, log_info
-
 log = logging.getLogger(__name__)
 
-_save_object_error = HarvestObjectError.create
 
 IMPORT_STAGE = 'Import'
     
@@ -100,32 +99,39 @@ def get_graph_uri_for_harvest_object(harvest_object: HarvestObject) -> str:
     return graph_uri
 
 @log_debug
-def process_dataset_before_finish_import_stage(package: model.Package, harvest_object: HarvestObject):
+def process_dataset_before_finish_import_stage(package: model.Package):
     """
     Provess datasets before finish import_stage to replace harvest objects id with ckan uris in servedByDataservice and accessService metadata
 
     :param package: package to update
     :type package: model.Package
+
     
-    :param harvest_object: harvest object that is being processed
-    type harvest_object: Harvest Object
+    :return tuple
+        missing_related_served_by_dataservices_ho_id: harvest_object ids of not found right dataservices related by servedByDatasetRelation
+        missing_related_access_services_ho_id: harvest_object ids of not found right dataservices related by accessService relation
+    :rtype tuple[list[str], list[Dic[str,str]]] 
     """
     object_type = CommonPackageConstants.KEY_TYPE_DATASET_VALUE
 
     # update servedByDataservice property
     served_by_dataservices = package.get(DatasetConstants.KEY_DATASET_SERVED_BY_DATASERVICE)
-    package[DatasetConstants.KEY_DATASET_SERVED_BY_DATASERVICE] = _get_related_dataservices_data_from_harvest_object_ids(harvest_object, served_by_dataservices, 'dataset', object_type)
+    package[DatasetConstants.KEY_DATASET_SERVED_BY_DATASERVICE], missing_related_served_by_dataservices_ho_id  = _get_related_dataservices_data_from_harvest_object_ids(served_by_dataservices)
     
     # update accessService in each resource
     resources = package.get(DatasetConstants.KEY_RESOURCES, [])
+    missing_related_access_services_ho_id_by_distribution = {}
+    
     for resource in resources:
         access_services = resource.get(DistributionConstants.KEY_DISTRIBUTION_ACCESS_SERVICE, [])
-        resource[DistributionConstants.KEY_DISTRIBUTION_ACCESS_SERVICE] = _get_related_dataservices_data_from_harvest_object_ids(harvest_object, access_services, 'distribution', object_type)
+        resource[DistributionConstants.KEY_DISTRIBUTION_ACCESS_SERVICE], missing_related_access_services_ho_id = _get_related_dataservices_data_from_harvest_object_ids(access_services)
+        if missing_related_access_services_ho_id:
+            missing_related_access_services_ho_id_by_distribution[resource.get("source_uri")] = missing_related_access_services_ho_id
+    return missing_related_served_by_dataservices_ho_id, missing_related_access_services_ho_id_by_distribution
 
-
-def _get_related_dataservices_data_from_harvest_object_ids(harvest_object, ho_id_list:List[str], associated_entity:str, object_type) -> List[str]:
-    method_log_prefix = f'[{inspect.currentframe().f_code.co_name}]'
+def _get_related_dataservices_data_from_harvest_object_ids(ho_id_list:List[str]) -> List[str]:
     results = []
+    invalid_related_harvest_objects_id = []
     for ho_id in ho_id_list or []:
         if not ho_id:
             continue
@@ -143,10 +149,8 @@ def _get_related_dataservices_data_from_harvest_object_ids(harvest_object, ho_id
                 results.append(result[0])
         else:
             log.warning(f'Could not find the current data service (package_id) associated with Harvest_object {ho_id}')
-            warning = HarvesterConstants.IMPORT_WARNING.format(object_type, f"The data service associated with the {associated_entity} could not be found")
-            log.warning(f"{method_log_prefix} Saving objectError {warning} for harvest_object_guid {harvest_object.guid}")
-            _save_object_error(warning, harvest_object, )
-    return results
+            invalid_related_harvest_objects_id.append(ho.id)
+    return results, invalid_related_harvest_objects_id
 
 @log_debug
 def build_triples_of_catalog_record_and_lineage(catalog, old_package_uri, new_package_uri, created_datetime , modified_datetime, conforms_to_uri) ->  List[Tuple[URIRef, URIRef, URIRef]]:
@@ -192,7 +196,7 @@ def build_triples_of_catalog_record_and_lineage(catalog, old_package_uri, new_pa
     return triples
 
 @log_info
-def delete_package_in_rdf_store(object_type:str, rdf_store:RDFStoreDelete, harvest_object:HarvestObject, uri:str):
+def delete_package_in_rdf_store(object_type:str, rdf_store:RDFStoreDelete, uri:str):
     """
     Delete package in rdf store
 
@@ -202,33 +206,32 @@ def delete_package_in_rdf_store(object_type:str, rdf_store:RDFStoreDelete, harve
     rdf_store: RDS Store to delete data 
     rdf_store:  RDFStoreDelete
     
-    harvest_object: Harvest object
-    harvest_object: HarvestObject
-    
     uri: object/package uri
     uri: str 
+    
+    :returns: True if object deleted, False in other case
+    :rtype: bool
     """
     method_log_prefix = f'[{inspect.currentframe().f_code.co_name}]'
     log.debug(f'{method_log_prefix}. Deleting package with uri {uri} in graph {rdf_store.graph_uri}')
     deleted_object = False
     if not uri:
-        return
+        return deleted_object
     if object_type and object_type == CommonPackageConstants.KEY_TYPE_DATASERVICE_VALUE:
         rdf_store.delete_dataservice_in_graph(uri)
         deleted_object = True
-        _save_object_error(HarvesterConstants.DELETE_DATASERVICE.format(uri), harvest_object)
+        
     if object_type and object_type == CommonPackageConstants.KEY_TYPE_DATASET_VALUE:
         rdf_store.delete_dataset_in_graph(uri)
         deleted_object = True
-        _save_object_error(HarvesterConstants.DELETE_DATASET.format(uri), harvest_object)
     if deleted_object:
         rdf_store.drop_all_unreferenced_nodes()
+    return deleted_object
 
 @log_info
 def import_existing_package(existing_package, package, harvest_object, harvest_object_extras, context):
     method_log_prefix = f'[{inspect.currentframe().f_code.co_name}]'
-    object_type = package.get('type', 'unknown')        
-    IMPORT_STAGE = 'Import'
+    object_type = package.get('type', 'unknown') 
     harvest_object_guid = harvest_object.guid
     package_plugin = lib_plugins.lookup_package_plugin(package.get('type', None))
     package_schema = package_plugin.update_package_schema()
@@ -258,9 +261,8 @@ def import_existing_package(existing_package, package, harvest_object, harvest_o
             return 'unchanged'
     except p.toolkit.ValidationError as e:
         error = HarvesterConstants.IMPORT_ERROR.format(object_type, f'Update validation Error: {str(e.error_summary)}')
-        log.error(f"{method_log_prefix} Error saving objectError {error} for harvest_object_guid {harvest_object_guid}", exc_info=True)
-        _save_object_error(error, harvest_object, IMPORT_STAGE)
-        return False
+        log.exception(f"{method_log_prefix} Error saving objectError {error} for harvest_object_guid {harvest_object_guid}")
+        raise e
 
     log.info(f'{method_log_prefix} Updated {object_type} {package.get(CommonPackageConstants.KEY_NAME)}')
     return True
@@ -328,17 +330,14 @@ def import_new_package(package, harvest_object, harvest_object_extras, context):
             log.info(f'Ignoring {object_type} {name}')
             return 'unchanged'
     except (p.toolkit.ValidationError, Exception) as e:
-        log.error(f'{method_log_prefix} Create validation Error {type(e)}: {str(e)} for harvest_object_guid {harvest_object_guid}', exc_info=True)
-        error = HarvesterConstants.IMPORT_ERROR.format(object_type, f'Create validation Error: {str(e)}')
-        _save_object_error(error, harvest_object, IMPORT_STAGE)
-        return False
+        log.exception(f'{method_log_prefix} Create validation Error {type(e)}: {str(e)} for harvest_object_guid {harvest_object_guid}')
+        raise e
     for harvester in p.PluginImplementations(IDCATRDFHarvester):
         err = harvester.after_create(harvest_object, package, harvester_tmp_dict)
         if err:
-            _save_object_error('RDFHarvester plugin error: %s' % err, harvest_object, IMPORT_STAGE)
-            return False
+            return False, err
     log.info(f'{method_log_prefix} Created {object_type} {package.get(CommonPackageConstants.KEY_NAME)}')
-    return True
+    return True, None
 
 
 @log_info

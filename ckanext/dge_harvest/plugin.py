@@ -21,13 +21,19 @@ import logging
 import os
 import ckanext.dge_harvest
 from ckanext.dge_harvest import helpers
+from ckanext.dge_harvest.model import (
+    get_job_extra,
+)
 from .logic import (dge_harvest_package_show,
+                                       dge_harvest_job_finished,
+                                       dge_harvest_job_report,
                                        dge_harvest_catalog_show,
                                        dge_harvest_catalog_show_edp,
                                        dge_harvest_catalog_show_csv,
                                        dge_harvest_clear_old_harvest_jobs,
                                        dge_harvest_source_email_job_finished,
                                        dge_harvest_get_running_harvest_jobs,
+                                       dge_harvest_job_report_auth,
                                        dge_harvest_auth,
                                        dge_harvest_is_sysadmin)
 from ckan.plugins.toolkit import config
@@ -65,6 +71,8 @@ class DgeHarvestPlugin(plugins.SingletonPlugin, DefaultTranslation):
     def get_actions(self):
         return {
             'dge_harvest_package_show': dge_harvest_package_show,
+            'dge_harvest_job_finished': dge_harvest_job_finished,
+            'dge_harvest_job_report': dge_harvest_job_report,
             'dge_harvest_catalog_show': dge_harvest_catalog_show,
             'dge_harvest_catalog_show_edp': dge_harvest_catalog_show_edp,
             'dge_harvest_catalog_show_csv': dge_harvest_catalog_show_csv,
@@ -77,6 +85,8 @@ class DgeHarvestPlugin(plugins.SingletonPlugin, DefaultTranslation):
     def get_auth_functions(self):
         return {
             'dge_harvest_package_show': dge_harvest_auth,
+            'dge_harvest_job_finished': dge_harvest_is_sysadmin,
+            'dge_harvest_job_report': dge_harvest_job_report_auth,
             'dge_harvest_catalog_show': dge_harvest_auth,
             'dge_harvest_catalog_show_edp': dge_harvest_auth,
             'dge_harvest_catalog_show_csv': dge_harvest_auth,
@@ -105,9 +115,10 @@ class DgeHarvestPlugin(plugins.SingletonPlugin, DefaultTranslation):
             '_dge_harvest_list_nti_field_values': helpers._dge_harvest_list_nti_field_values,
             'dge_harvest_get_vocabulary_element_label_dict': helpers.dge_harvest_get_vocabulary_element_label_dict,
             'dge_harvesters_info': helpers.dge_harvesters_info,
+            'dge_harvest_job_report': helpers.dge_harvest_job_report,
+            'get_job_extra': get_job_extra,
             'dge_get_organization': helpers.dge_get_organization
-																
-            }
+        }
 
     # ########################### ITranslation ############################
     def i18n_directory(self):

@@ -33,6 +33,8 @@ import ckan.plugins.toolkit as tk
 from .vocabulary_utils import dge_harvest_get_vocabulary_element_labels
 from .decorators import log_info, log_debug
 
+from ckan.model import Session
+
 import logging
 
 log = logging.getLogger(__name__)
@@ -228,3 +230,50 @@ def dge_harvesters_info():
     harvesters_info = hh.harvesters_info()
     harvesters_info.sort(key=lambda x: x.get("order", 999))
     return harvesters_info
+
+def dge_harvest_job_report(harvest_job_id, **query_params):
+    """Return the unified federation report for one harvest job.
+
+    This helper is intended for templates and views that need to consume the
+    new action without building the action context manually. It forwards the
+    current CKAN user and the requested query parameters to
+    ``dge_harvest_job_report``.
+
+    Args:
+        harvest_job_id (str): Harvest job identifier.
+        **query_params: Optional query parameters such as pagination, filters
+            or sort fields supported by the action.
+
+    Returns:
+        dict: Action response returned by ``dge_harvest_job_report``.
+    """
+    data_dict = {'id': harvest_job_id}
+    data_dict.update(query_params)
+    context = {'model': model, 'session': Session, 'user': getattr(c, 'user', None)}
+    try:
+        return tk.get_action('dge_harvest_job_report')(context, data_dict)
+    except Exception:
+        log.exception(
+            'Unable to render unified federation report for harvest job %s',
+            harvest_job_id,
+        )
+        return {
+            'job_id': harvest_job_id,
+            'mode': 'legacy',
+            'rows': [],
+            'summary': {
+                'total': 0,
+                'error': 0,
+                'warning': 0,
+                'info': 0,
+            },
+            'total': 0,
+            'page': 1,
+            'limit': 20,
+            'message_type': None,
+            'sort_by': 'count',
+            'sort_dir': 'desc',
+            'guide_url': None,
+            'guide_label': None,
+            'csv_url': None,
+        }

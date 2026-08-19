@@ -20,13 +20,15 @@
 import logging
 import time
 import inspect
+import json
 from pyshacl import validate
 from rdflib import ConjunctiveGraph, Graph #, URIRef, BNode
 from rdflib.exceptions import ParserError
-from typing import List, Tuple
+from typing import List, Tuple, Dict
 from ...utils import load_graph_from_source
 from ...decorators import log_debug, log_info
 from .shacl_results_formatter import format_shacl_validation_results
+from .shacl_results_dict_formatter import summarize_shacl_validation_results
 
 log = logging.getLogger(__name__)
 
@@ -109,7 +111,7 @@ class ShaclValidator():
         return conforms, messages
 
     @log_debug
-    def _check_validation(self, data_graph:Graph, shapes_graph:Graph, ontology_graph:Graph) -> Tuple[bool, list[str]]: 
+    def _check_validation(self, data_graph:Graph, shapes_graph:Graph, ontology_graph:Graph) -> Tuple[bool, list[Dict[str, str]]]: 
         '''
         Validate a data_graph against a shape and an ontology graphs.
         
@@ -123,7 +125,7 @@ class ShaclValidator():
         :type ontology_graph: rdflib.Graph
         
         :returns: a tuple (conforms, messages) where conforms is true if the data_graph conforms to the shacl_graph or false in other case
-                and messages is a list with the report messages
+                and messages is a list with the dict report messages
         :rtype: (bool, list)
         '''  
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
@@ -149,8 +151,9 @@ class ShaclValidator():
                                                             debug=False,
                                                             do_owl_imports=False)#,
                                                             #serialize_report_graph='turtle')
-            #log.info(f'{method_log_prefix} \nConforms={conforms}; \nresults_graph={results_graph.serialize()}; \nresults_text={results_text}')
-            messages = format_shacl_validation_results(results_graph, data_graph)
+
+            messages = summarize_shacl_validation_results(results_graph, data_graph)
+
         except (AttributeError, RuntimeError, Exception) as e:
             log.debug(f'{method_log_prefix} Exception:{e}. Time: {time.time() - ini} seconds.')
             raise ShaclValidatorException(e)

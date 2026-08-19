@@ -279,8 +279,8 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     CATALOG_WRONG_DEFINITION = 'No se ha encontrado la URI del cat\u00E1logo o la etiqueta del cat\u00E1logo no ha sido declarada (rdf:about)'
     DATASET_WRONG_DEFINITION = 'No se ha encontrado la URI del dataset o la etiqueta del dataset no ha sido declarada (rdf:about)'
     
-    IMPORT_ERROR = '[Error al importar el {} en base de datos] {}.'
-    IMPORT_WARNING = '[Warning al importar el {} en base de datos] {}.'
+    IMPORT_ERROR = 'Error al importar el {} en base de datos. {}.'
+    IMPORT_WARNING = 'Warning al importar el {} en base de datos. {}.'
     
     INTEGRITY_ERROR = 'Es posible que exista otro dataset en el cat\u00E1logo cuyo t\u00EDtulo en es coincida con el de otro dataset en los primeros 300 caracteres'
     
@@ -299,9 +299,20 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     DATASERVICE_INTEGRITY_ERROR = 'Es posible que exista otro dataservice en el cat\u00E1logo cuyo t\u00EDtulo en es coincida con el de otro dataservice en los primeros 300 caracteres'
 
 
-    VALIDATION_UNEXPECTED_ERROR_MESSAGE = '[ERROR][Node {}] {}'
-    VALIDATION_ERROR_MESSAGE = '[ERROR][Node {}][Metadata {}] {}'
-    VALIDATION_WARNING_MESSAGE = '[WARNING][Node {}][Metadata {}] {}'
+    VALIDATION_ERROR_MESSAGE = 'Se ha producido un error al parsear el metadato {}.'
+    VALIDATION_UNEXPECTED_ERROR_MESSAGE = 'Se ha producido un error en el parseo.'
+    VALIDATION_CATALOG_ERROR_MESSAGE = '[Cat\u00E1logo {}] ' + VALIDATION_ERROR_MESSAGE
+    VALIDATION_UNEXPECTED_CATALOG_ERROR_MESSAGE = '[Cat\u00E1logo {}] ' + VALIDATION_UNEXPECTED_ERROR_MESSAGE
+    VALIDATION_DATASET_ERROR_MESSAGE = '[Conjunto de datos {}]' + VALIDATION_ERROR_MESSAGE
+    VALIDATION_UNEXPECTED_DATASET_ERROR_MESSAGE = '[Conjunto de datos {}] ' + VALIDATION_UNEXPECTED_ERROR_MESSAGE
+    VALIDATION_DATASERVICE_ERROR_MESSAGE = '[Servicio de datos {}] ' + VALIDATION_ERROR_MESSAGE
+    VALIDATION_UNEXPECTED_DATASERVICE_ERROR_MESSAGE = '[Servicio de datos {}] ' + VALIDATION_UNEXPECTED_ERROR_MESSAGE
+    VALIDATION_DISTRIBUTION_ERROR_MESSAGE = '[Distribuci\u00F3n {} de conjunto de datos {}] ' + VALIDATION_ERROR_MESSAGE
+    VALIDATION_UNEXPECTED_DISTRIBUTION_ERROR_MESSAGE = '[Distribuci\u00F3n {} de conjunto de datos {}] ' + VALIDATION_UNEXPECTED_ERROR_MESSAGE
+
+    VALIDATION_UNEXPECTED_ERROR_MESSAGE = 'Se ha producido un error al parsear el {}'
+    
+    VALIDATION_WARNING_MESSAGE = 'Se ha producido un warning al parsear el metadato {}'
     
     VALIDATION_SUBNODE_UNEXPECTED_ERROR_MESSAGE = '[ERROR][Node {} of {}] {}'
     VALIDATION_SUBNODE_ERROR_MESSAGE = '[ERROR][Node {} of {}][Metadata {}] {}'
@@ -319,8 +330,9 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     NO_LANGUAGE_KEY = 'no_language'
     OFFERED_LANGUAGES_NOT_FOUND = 'No encontrado ning\u00FAn idioma ofrecido por el portal ({})'
     DEFAULT_LANGUAGE_NOT_FOUND = 'No encontrado el idioma por defecto del portal ({})' 
-    SHACL_VALIDATION_ERROR = 'Error al hacer las validaciones de vocabularios y SHACL de la url {}. Error: {}'
+    SHACL_VALIDATION_ERROR = 'Error al hacer las validaciones de vocabularios y SHACL. Error: {}'
     PRE_VALIDATION_ERROR = 'Error al hacer la validaci\u00F3n RDF de la url {}. Error: {}'
+    GATHER_STAGE_ERROR = 'Error no contralado en la etapa gather de la federaci\u00F3n. Error: {}'
     PREPROCESSING_ERROR = 'Error al hacer el preprocesamiento del RDF de la url {}. Error: {}'
     NAMESPACE_VALIDATION_ERROR = 'Error al validar los namespaces del RDF de la url {}. Error: {}'
     VIRTUOSO_LOAD_ERROR = 'Error en la carga de virtuoso de la url {}. Error: {}'
@@ -329,26 +341,26 @@ class DCATAPESHarvesterConstants(HarvesterConstants):
     NOT_FOUND_ROOT_CATALOG = '[ERROR] No hay cat\u00E1logos en el RDF'
     NON_CANONICAL_NAMESPACES_ERROR = 'Se han encontrado namespaces cuya URI no coincide con la definición oficial de DCAT-AP-ES. Namespaces usados: {}. Namespaces esperados: {}.'
     
-    DELETE_UNDESCRIBED_CATALOG = "[INFO] Se elimin\u00F3 un cat\u00E1logo referenciado no descrito: {}."
-    DELETE_UNDESCRIBED_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos referenciado no descrito: {}."
-    DELETE_UNDESCRIBED_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos referenciado no descrito: {}."
-    DELETE_UNREFERENCED_DATASET_IN_CATALOG = "[INFO] Se eliminaron las referencias de un conjunto de datos no referenciado en el cat\u00E1logo {}."
-    DELETE_UNREFERENCED_DATASERVICE_IN_CATALOG = "[INFO] Se eliminaron las referencias de un servicio de datos no referenciado en el cat\u00E1logo {}."
-    DELETE_UNREFERENCED_DESCRIBED_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos descrito pero no referenciado en el cat\u00E1logo {}."
-    DELETE_UNREFERENCED_DESCRIBED_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos descrito pero no referenciado en el cat\u00E1logo {}."
-    DELETE_UNREFERENCED_NODE = "[INFO] Se elimin\u00F3 un nodo no referenciado {}."
-    DELETE_CATALOG_RECORD = "[INFO] Se eliminaron las referencias y la entidad CatalogRecord {}."
-    DELETE_DATASET_REFERENCE_IN_CATALOG = "[INFO] El conjunto de datos {} estaba referenciado en varios cat\u00E1logos. Para dejarlo referenciado solo en uno, se eliminaron las referencias en los siguientes cat\u00E1logos: {}."
-    DELETE_DATASERVICE_REFERENCE_IN_CATALOG = "[INFO] El conjunto de datos {} estaba referenciado en varios cat\u00E1logos. Para dejarlo referenciado solo en uno, se eliminaron las referencias en los siguientes cat\u00E1logos: {}."
-    DELETE_CATALOG = "[INFO] Se elimin\u00F3 un cat\u00E1logo que no cumple con las especificaciones: {}."
-    DELETE_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos que no cumple con las especificaciones: {}."
-    DELETE_HVD_DATASERVICE = "[INFO] Se elimin\u00F3 un servicio de datos HVD que no cumple con las especificaciones: {}."
-    DELETE_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos que no cumple con las especificaciones: {}."
-    DELETE_AGENT_DATA = "[INFO] Recuperada info de la organizaci\u00F3n: {}. Los datos proporcionados en el archivo RDF no se utilizar\u00E1n y ser\u00E1n reemplazados por la informaci\u00F3n ya disponible en datos.gob.es."
-    DELETE_HVD_DATASET = "[INFO] Se elimin\u00F3 un conjunto de datos HVD que no cumple con las especificaciones: {}."
+    DELETE_UNDESCRIBED_CATALOG = "Se elimin\u00F3 un cat\u00E1logo referenciado no descrito: {}."
+    DELETE_UNDESCRIBED_DATASET = "Se elimin\u00F3 un conjunto de datos referenciado no descrito: {}."
+    DELETE_UNDESCRIBED_DATASERVICE = "Se elimin\u00F3 un servicio de datos referenciado no descrito: {}."
+    DELETE_UNREFERENCED_DATASET_IN_CATALOG = "Se eliminaron las referencias de un conjunto de datos no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_DATASERVICE_IN_CATALOG = "Se eliminaron las referencias de un servicio de datos no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_DESCRIBED_DATASET = "Se elimin\u00F3 un conjunto de datos descrito pero no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_DESCRIBED_DATASERVICE = "Se elimin\u00F3 un servicio de datos descrito pero no referenciado en el cat\u00E1logo {}."
+    DELETE_UNREFERENCED_NODE = "Se elimin\u00F3 un nodo no referenciado {}."
+    DELETE_CATALOG_RECORD = "Se eliminaron las referencias y la entidad CatalogRecord {}."
+    DELETE_DATASET_REFERENCE_IN_CATALOG = "El conjunto de datos {} estaba referenciado en varios cat\u00E1logos. Para dejarlo referenciado solo en uno, se eliminaron las referencias en los siguientes cat\u00E1logos: {}."
+    DELETE_DATASERVICE_REFERENCE_IN_CATALOG = "El conjunto de datos {} estaba referenciado en varios cat\u00E1logos. Para dejarlo referenciado solo en uno, se eliminaron las referencias en los siguientes cat\u00E1logos: {}."
+    DELETE_CATALOG = "Se elimin\u00F3 un cat\u00E1logo que no cumple con las especificaciones: {}."
+    DELETE_DATASERVICE = "Se elimin\u00F3 un servicio de datos que no cumple con las especificaciones: {}."
+    DELETE_HVD_DATASERVICE = "Se elimin\u00F3 un servicio de datos HVD que no cumple con las especificaciones: {}."
+    DELETE_DATASET = "Se elimin\u00F3 un conjunto de datos que no cumple con las especificaciones: {}."
+    DELETE_AGENT_DATA = "Recuperada info de la organizaci\u00F3n: {}. Los datos proporcionados en el archivo RDF no se utilizar\u00E1n y ser\u00E1n reemplazados por la informaci\u00F3n ya disponible en datos.gob.es."
+    DELETE_HVD_DATASET = "Se elimin\u00F3 un conjunto de datos HVD que no cumple con las especificaciones: {}."
     NO_VALID_DISTRIBUTION_IN_DATASET ="[ERROR] No hay distribuciones v\u00E1lidas en el conjunto de datos {}."
-    NO_DATA_TO_HARVEST = "[INFO] No hay objetos para federar."
-    CATALOG_WITH_ERRORS = "[ERROR] Existen cat\u00E1logos con errores. Para realizar la federaci\u00F3n, todos los cat\u00E1logos deben ser v\u00E1lidos."
+    NO_DATA_TO_HARVEST = "No hay objetos para federar."
+    CATALOG_WITH_ERRORS = "Existen cat\u00E1logos con errores. Para realizar la federaci\u00F3n, todos los cat\u00E1logos deben ser v\u00E1lidos."
     
     # profile import stage constants
     CONTACT_POINT_VCARD_CLASSES = (VCARD.Kind, VCARD.Organization, VCARD.Group, VCARD.Individual, VCARD.Location)

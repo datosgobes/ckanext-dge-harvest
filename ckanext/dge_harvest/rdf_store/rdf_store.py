@@ -22,7 +22,7 @@ import logging
 import inspect
 import time
 import re
-from typing import List, Tuple, Set
+from typing import Iterator, List, Tuple, Set
 from SPARQLWrapper import SPARQLWrapper, DIGEST, GET, JSON, QueryResult
 from SPARQLWrapper import RDF as RDF_FORMAT
 from SPARQLWrapper.SPARQLExceptions import SPARQLWrapperException, EndPointNotFound
@@ -36,18 +36,14 @@ from ..constants import DCATAPESConfigConstants as ConfigConstants
 from ..decorators import log_debug, log_info
 from ..utils import safe_n3_uriref, from_str_to_uriref, get_int_value_from_ckan_property
 from rdflib import Graph, BNode, Literal, URIRef
+from .rdf_store_exceptions import (
+    RDFStoreConnectionException,
+    RDFStoreException,
+    RDFStoreInternalException,
+    RDFStoreQueryException,
+)
 
 log = logging.getLogger(__name__)
-
-class RDFStoreInternalException(Exception):
-    def __init__(self, msg=None) -> None:
-        Exception.__init__(self, msg)
-        self.msg = msg
-
-class RDFStoreException(RDFStoreInternalException):
-    def __init__(self, msg=None) -> None:
-        Exception.__init__(self, msg)
-        self.msg = msg
 
 class RDFStore():
     '''
@@ -68,7 +64,14 @@ class RDFStore():
         Return the exception if it a RDFStoreException or a new RDFStore exception if it is a RDFStoreInteralExceptio.
         Out of these methos always return RDFStoreInternalException
         '''
-        return exception if isinstance(exception, RDFStoreException) else RDFStoreException(str(exception))
+        if isinstance(exception, RDFStoreException):
+            return exception
+        wrapped_exception = RDFStoreException(
+            str(exception),
+            context=getattr(exception, "context", None),
+        )
+        wrapped_exception.__cause__ = exception
+        return wrapped_exception
 
     def __init__(self, graph_uri:str) -> None:
         '''
@@ -161,20 +164,59 @@ class RDFStore():
         result = None
         self._set_query(query, method, return_format)
         attempt = 0
+        context = {
+            'operation': inspect.currentframe().f_code.co_name,
+            'graph_uri': str(self.graph_uri) if self.graph_uri else None,
+            'query_kind': 'execute',
+            'method': method,
+            'return_format': return_format,
+            'attempt': attempt + 1,
+        }
         while attempt < self.max_attempts:
             try:
+                context['attempt'] = attempt + 1
                 result = self.sparql.query()
                 return result
-            except (URLError, EndPointNotFound) as e:
+            except (URLError, EndPointNotFound, HTTPError, TimeoutError) as e:
                 attempt += 1
-                log.warning(f'{method_log_prefix} Attempt {attempt}/{self.max_attempts} An exception has occurred executing query {query}, with method {method} and return format = {return_format}. {type(e).__name__}: {str(e)}')
+                context['attempt'] = attempt
+                log.warning(
+                    f'{method_log_prefix} Attempt {attempt}/{self.max_attempts} '
+                    f'connection error executing query with method {method} and '
+                    f'return format = {return_format}. {type(e).__name__}: {str(e)}'
+                )
                 if attempt < self.max_attempts:
                     time.sleep(2)
                 else:
-                    raise RDFStoreInternalException(str(e))
-            except (SPARQLWrapperException, Exception) as e:
-                log.error(f'{method_log_prefix} An exception has occurred executing query {query}, with method {method} and return format = {return_format}. {type(e).__name__}: {str(e)}', exc_info=True)
-                raise RDFStoreInternalException(str(e))
+                    raise RDFStoreConnectionException(
+                        f'Virtuoso connection error executing query with method={method} '
+                        f'and return_format={return_format}. {str(e)}',
+                        context=context,
+                    ) from e
+            except SPARQLWrapperException as e:
+                log.error(
+                    f'{method_log_prefix} Query execution error executing query {query}, '
+                    f'with method {method} and return format = {return_format}. '
+                    f'{type(e).__name__}: {str(e)}',
+                    exc_info=True,
+                )
+                raise RDFStoreQueryException(
+                    f'Virtuoso query error executing query with method={method} '
+                    f'and return_format={return_format}. {str(e)}',
+                    context=context,
+                ) from e
+            except Exception as e:
+                log.error(
+                    f'{method_log_prefix} Unexpected error executing query {query}, '
+                    f'with method {method} and return format = {return_format}. '
+                    f'{type(e).__name__}: {str(e)}',
+                    exc_info=True,
+                )
+                raise RDFStoreQueryException(
+                    f'Virtuoso query error executing query with method={method} '
+                    f'and return_format={return_format}. {str(e)}',
+                    context=context,
+                ) from e
 
     def _set_execute_and_convert_sparql_query_to_virtuoso(self, query: str, method: str=GET, return_format: str=RDF_FORMAT) ->  "QueryResult.ConvertResult":
         '''
@@ -197,25 +239,68 @@ class RDFStore():
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         result = None
         attempt = 0
+        context = {
+            'operation': inspect.currentframe().f_code.co_name,
+            'graph_uri': str(self.graph_uri) if self.graph_uri else None,
+            'query_kind': 'execute_and_convert',
+            'method': method,
+            'return_format': return_format,
+            'attempt': attempt + 1,
+        }
         while attempt < self.max_attempts:
             try:
                 self._set_query(query, method, return_format)
+                context['attempt'] = attempt + 1
                 result = self.sparql.queryAndConvert()
                 return result
-            except (URLError, EndPointNotFound) as e:
+            except (URLError, EndPointNotFound, HTTPError, TimeoutError) as e:
                 attempt += 1
-                log.warning(f'{method_log_prefix} Attempt {attempt}/{self.max_attempts} An exception has occurred executing query {query}, with method {method} and return format = {return_format}. {type(e).__name__}: {str(e)}')
+                context['attempt'] = attempt
+                log.warning(
+                    f'{method_log_prefix} Attempt {attempt}/{self.max_attempts} '
+                    f'connection error executing query with method {method} and '
+                    f'return format = {return_format}. {type(e).__name__}: {str(e)}'
+                )
                 if attempt < self.max_attempts:
                     time.sleep(2)
                 else:
-                    raise RDFStoreInternalException(str(e))
-            except (SPARQLWrapperException, Exception) as e:
-                log.error(f'{method_log_prefix} An exception has occurred executing query {query}, with method {method} and return format = {return_format}. {type(e).__name__}: {str(e)}', exc_info=True)
-                raise RDFStoreInternalException(str(e))
+                    raise RDFStoreConnectionException(
+                        f'Virtuoso connection error executing query with method={method} '
+                        f'and return_format={return_format}. {str(e)}',
+                        context=context,
+                    ) from e
+            except SPARQLWrapperException as e:
+                log.error(
+                    f'{method_log_prefix} Query execution error executing query {query}, '
+                    f'with method {method} and return format = {return_format}. '
+                    f'{type(e).__name__}: {str(e)}',
+                    exc_info=True,
+                )
+                raise RDFStoreQueryException(
+                    f'Virtuoso query error executing query with method={method} '
+                    f'and return_format={return_format}. {str(e)}',
+                    context=context,
+                ) from e
+            except Exception as e:
+                log.error(
+                    f'{method_log_prefix} Unexpected error executing query {query}, '
+                    f'with method {method} and return format = {return_format}. '
+                    f'{type(e).__name__}: {str(e)}',
+                    exc_info=True,
+                )
+                raise RDFStoreQueryException(
+                    f'Virtuoso query error executing query with method={method} '
+                    f'and return_format={return_format}. {str(e)}',
+                    context=context,
+                ) from e
 
+    #@log_debug
     def _get_subjects_by_predicate_and_object(self, predicate_value: str, object_value: str, distinct:bool = False) -> List[str]:
         '''
-        Get subjects for specific predicate and object in a graph
+        Get subjects for specific predicate and object in a graph.
+
+        This helper materializes the full result list in memory. For large
+        result sets, prefer `_get_subjects_by_predicate_and_object_in_batches`.
 
         :param predicate_value: predicate of the triple
         :type predicate_value: str
@@ -239,9 +324,38 @@ class RDFStore():
             result_uris.append(result['s']['value'])
         return result_uris
 
+    def _get_subjects_by_predicate_and_object_in_batches(self, predicate_value: str, object_value: str, distinct:bool = False, batch_size:int=None) -> Iterator[List[str]]:
+        '''
+        Yield subject URIs for specific predicate/object in paginated batches.
+
+        :param predicate_value: predicate of the triple
+        :type predicate_value: str
+
+        :param object_value: object of the triple
+        :type object_value: str
+
+        :param distinct: True if distinct values, False in other case
+        :type distinct: bool
+
+        :param batch_size: Maximum rows per batch. Defaults to configured query size.
+        :type batch_size: int | None
+
+        :yield: One batch of subject URIs at a time.
+        :rtype: Iterator[List[str]]
+        '''
+        graph = self.get_graph_uri_to_query()
+        object_value_query = f'{self._get_uriref_to_query(object_value)}' if object_value else '?o'
+        predicate_value_query = f'{self._get_uriref_to_query(predicate_value)}' if predicate_value else '?p'
+        query = f"SELECT{' DISTINCT' if distinct else ''} ?s FROM {graph} WHERE {{ ?s {predicate_value_query} {object_value_query} }}"
+        for subject_batch in self.get_objects_by_query_in_batches(query, 's', batch_size):
+            yield subject_batch
+
     def _get_objects_by_subject_and_predicate(self, subject_value: str, predicate_value: str, distinct: bool=False) -> List[str]:
         '''
-        Get objects for specific predicate and subject in a graph
+        Get objects for specific predicate and subject in a graph.
+
+        This helper materializes the full result list in memory. For large
+        result sets, prefer `_get_objects_by_subject_and_predicate_in_batches`.
 
         :param subject_value: subject of the triple. None if any subject
         :type subject_value: str
@@ -262,6 +376,32 @@ class RDFStore():
         query = f"SELECT{' DISTINCT' if distinct else ''} ?o FROM {graph} WHERE {{ {subject_value_query} {predicate_value_query} ?o }}"
         result_uris = self.get_objects_by_query(query, 'o')
         return result_uris
+
+    def _get_objects_by_subject_and_predicate_in_batches(self, subject_value: str, predicate_value: str, distinct: bool=False, batch_size:int=None) -> Iterator[List[str]]:
+        '''
+        Yield object URIs for specific predicate/subject in paginated batches.
+
+        :param subject_value: subject of the triple. None if any subject
+        :type subject_value: str
+
+        :param predicate_value: predicate of the triple. None if any predicate
+        :type predicate_value: str
+
+        :param distinct: True if get distinct objects, False if other case
+        :type distinct: bool
+
+        :param batch_size: Maximum rows per batch. Defaults to configured query size.
+        :type batch_size: int | None
+
+        :yield: One batch of object URIs at a time.
+        :rtype: Iterator[List[str]]
+        '''
+        graph = self.get_graph_uri_to_query()
+        subject_value_query = f'{self._get_uriref_to_query(subject_value)}' if subject_value else '?s'
+        predicate_value_query = f'{self._get_uriref_to_query(predicate_value)}' if predicate_value else '?p'
+        query = f"SELECT{' DISTINCT' if distinct else ''} ?o FROM {graph} WHERE {{ {subject_value_query} {predicate_value_query} ?o }}"
+        for object_batch in self.get_objects_by_query_in_batches(query, 'o', batch_size):
+            yield object_batch
 
     def _get_type_triple_from_subject_if_exists(self, subject_uri_or_bnode, object_to_check):
         '''
@@ -306,12 +446,16 @@ class RDFStore():
                 result = result["boolean"] if result else False
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred executing query = {ask_query}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return result
 
     def _get_results_by_query(self, query:str) -> List[str]:
         '''
-        Get a list of object value as the result of a query
+        Get full result bindings of a query.
+
+        This helper materializes the complete result set in memory and should
+        only be used for bounded or small cardinality queries. For large
+        result sets, prefer `_get_results_by_query_in_batches`.
 
         :param query: query to execute
         :type query: str
@@ -326,10 +470,72 @@ class RDFStore():
                 result_list = results["results"]["bindings"]
         return result_list
 
+    def _build_paginated_select_query(self, query: str, limit: int, offset: int=0) -> str:
+        '''
+        Append LIMIT/OFFSET to a SELECT query that does not already define them.
+
+        :param query: Base SELECT query without LIMIT/OFFSET.
+        :type query: str
+
+        :param limit: Maximum rows to fetch.
+        :type limit: int
+
+        :param offset: Starting row offset.
+        :type offset: int
+
+        :return: Paginated query.
+        :rtype: str
+
+        :raise RDFStoreInternalException: If query is not suitable for this helper.
+        '''
+        normalized_query = (query or '').strip()
+        if not normalized_query:
+            raise RDFStoreInternalException('A query is mandatory')
+        if not normalized_query.upper().startswith('SELECT'):
+            raise RDFStoreInternalException('Batch pagination is only supported for SELECT queries')
+        if re.search(r'\bLIMIT\b', normalized_query, flags=re.IGNORECASE) or re.search(r'\bOFFSET\b', normalized_query, flags=re.IGNORECASE):
+            raise RDFStoreInternalException('Batch pagination helper expects query without LIMIT/OFFSET')
+
+        paginated_query = f'{normalized_query} LIMIT {limit}'
+        if offset:
+            paginated_query = f'{paginated_query} OFFSET {offset}'
+        return paginated_query
+
+    def _get_results_by_query_in_batches(self, query:str, batch_size:int=None) -> Iterator[List[str]]:
+        '''
+        Yield query result bindings in paginated batches.
+
+        :param query: Base SELECT query without LIMIT/OFFSET.
+        :type query: str
+
+        :param batch_size: Maximum rows per batch. Defaults to configured query size.
+        :type batch_size: int | None
+
+        :yield: One batch of bindings at a time.
+        :rtype: Iterator[List[str]]
+        '''
+        batch_size = batch_size or self.max_triples_per_query
+        offset = 0
+
+        while True:
+            paginated_query = self._build_paginated_select_query(query, batch_size, offset)
+            results = self._get_results_by_query(paginated_query)
+            if not results:
+                break
+
+            yield results
+            if len(results) < batch_size:
+                break
+            offset += batch_size
+
     @log_debug
     def get_objects_by_query(self, query:str, object_name:str='o') -> List[str]:
         '''
-        Get a list of object value as the result of a query
+        Get a list of object value as the result of a query.
+
+        This helper materializes the complete result set in memory and should
+        only be used for bounded or small cardinality queries. For large
+        result sets, prefer `get_objects_by_query_in_batches`.
 
         :param query: query to execute
         :type query: str
@@ -351,8 +557,34 @@ class RDFStore():
                     result_uris = [result[object_name]['value'] for result in results]
         except (RDFStoreInternalException) as e:
             log.error(f'{method_log_prefix} An exception has occurred getting data objects by query={query}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            raise self._get_raise_exception(e) from e
         return result_uris
+
+    def get_objects_by_query_in_batches(self, query:str, object_name:str='o', batch_size:int=None) -> Iterator[List[str]]:
+        '''
+        Yield object values from a SELECT query in paginated batches.
+
+        :param query: Base SELECT query without LIMIT/OFFSET.
+        :type query: str
+
+        :param object_name: Name of binding to extract.
+        :type object_name: str
+
+        :param batch_size: Maximum rows per batch. Defaults to configured query size.
+        :type batch_size: int | None
+
+        :yield: One batch of object values at a time.
+        :rtype: Iterator[List[str]]
+
+        :raise RDFStoreException
+        '''
+        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
+        try:
+            for results in self._get_results_by_query_in_batches(query, batch_size):
+                yield [result[object_name]['value'] for result in results if object_name in result]
+        except (RDFStoreInternalException) as e:
+            log.error(f'{method_log_prefix} An exception has occurred getting batched data objects by query={query}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e)
 
     def _check_if_only_one_subject_by_object_uri(self, object_uri) -> bool:
         '''
@@ -416,6 +648,7 @@ class RDFStore():
                 result = f'-{result}' if negative_duration else result
         return result
 
+    #@log_debug
     def _replace_blank_nodes(self, graph_to_update: Graph, blank_node_prefix:str):
         """
         Replace automatically blank nodes to URIs

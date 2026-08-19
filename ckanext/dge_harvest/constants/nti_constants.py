@@ -66,6 +66,7 @@ class NTICatalogConstants(CatalogConstants):
     METADATA_CATALOG_LICENSE = 'T\u00E9rminos de uso (dct:license)'
     METADATA_CATALOG_DATASET = 'Dataset (dcat:dataset)'
     METADATA_CATALOG_DATASETS = 'Datasets (dcat:dataset)'
+    METADATA_CATALOG_PREFIX_MESSAGE = 'Cat\u00E1logo {}'
 
 class NTIDatasetConstants(DatasetConstants):
     # Keys of dataset dictionary
@@ -124,8 +125,9 @@ class NTIDatasetConstants(DatasetConstants):
     METADATA_DISTRIBUTION_MEDIA_TYPE = 'Formato de la distribuci\u00F3n (dcat:mediaType)'
     METADATA_DISTRIBUTION_BYTE_SIZE = 'Tama\u00F1o de la distribuci\u00F3n (dcat:byteSize)'
     METADATA_DISTRIBUTION_RELATION = 'Informaci\u00F3n adicional de la distribuci\u00F3n (dct:relation)'
-    METADATA_DISTRIBUTION_PREFIX_MESSAGE = 'Error en la distribuci\u00F3n: {}'
+    METADATA_DISTRIBUTION_PREFIX_MESSAGE = 'Distribuci\u00F3n {} del conjunto de datos {}'
     METADATA_DISTRIBUTION_NO_IDENTIFIER = '(Sin identificador)'
+    METADATA_DATASET_PREFIX_MESSAGE = 'Conjunto de datos {}'
 
 class NTIHarvesterConstants(HarvesterConstants):
     

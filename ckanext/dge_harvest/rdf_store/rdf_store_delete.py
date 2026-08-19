@@ -19,21 +19,148 @@
 # -*- coding: utf-8 -*-
 import logging
 import inspect
+import math
 from typing import List, Set
-from SPARQLWrapper import  QueryResult
+from SPARQLWrapper import POST, QueryResult
 from urllib.error import HTTPError
 from rdflib import Namespace, URIRef
 from ..constants.dcat_ap_es_constants import DCAT, RDF_NAMESPACE, DCT, HYDRA, FOAF, DCATAPESPrefixConstants, DcatClassNameEnum
 from ..constants.constants import RDFStoreConstants
 from .rdf_store_helper import RDFStoreHelper, RDFStoreException, RDFStoreInternalException
 from ..decorators import log_debug, log_info
+from ..utils import get_int_value_from_ckan_property
+from .rdf_store import RDFStore
 
 log = logging.getLogger(__name__)
+MAX_PREPROCESS_ITERATIONS_PROPERTY = 'ckanext.dge_harvest.preprocess.max_num_of_iterations'
 
 class RDFStoreDelete(RDFStoreHelper):
     '''
     Class that contains utils method to delete data in virtuoso
     '''
+    def _drop_subjects_in_graph(self, subject_uris: List[str]) -> QueryResult:
+        '''
+        Delete all triples whose subject is one of the provided URIs.
+
+        This helper is required when deleting batches of nodes by subject. A
+        query composed as multiple `<subject> ?p ?o` patterns in the same
+        `DELETE/WHERE` would incorrectly join on shared `?p` and `?o`
+        variables, so deletion must be expressed with `FILTER (?s IN (...))`.
+
+        :param subject_uris: Subject URIs to delete from the current graph.
+        :type subject_uris: List[str]
+
+        :return: Query result or None if there are no subjects to delete.
+        :rtype: QueryResult | None
+        '''
+        method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
+        graph_uri = self.get_graph_uri_to_query()
+
+        def _drop_subjects(batch_size):
+            result = None
+            if subject_uris:
+                total_batch = math.ceil(len(subject_uris) / batch_size)
+                for i in range(0, len(subject_uris), batch_size):
+                    batch_number = i // batch_size + 1
+                    current_subjects = subject_uris[i:i+batch_size]
+                    subjects = ', '.join(
+                        self._get_uriref_to_query(subject_uri)
+                        for subject_uri in current_subjects
+                    )
+                    query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }}
+                                WHERE {{ GRAPH {graph_uri} {{
+                                    ?s ?p ?o .
+                                    FILTER (?s IN ({subjects}))
+                                }} }}'''
+                    log.info(
+                        f'{method_log_prefix} Deleting subjects in batch '
+                        f'{batch_number}/{total_batch} with {len(current_subjects)} '
+                        f'subjects from graph {graph_uri}'
+                    )
+                    result = self._set_and_execute_sparql_query_to_virtuoso(
+                        query=query,
+                        method=POST,
+                        return_format=None
+                    )
+            return result
+
+        result = None
+        batch_size = RDFStore.BATCH_SIZE_FOR_DELETES
+        min_batch_size = RDFStore.BATCH_SIZE_FOR_DELETES_MIN
+        try:
+            result = _drop_subjects(batch_size)
+        except RDFStoreInternalException:
+            log.warning(
+                f'{method_log_prefix} Error trying to delete subjects in batches '
+                f'of size {batch_size}. Trying to delete in batches of size '
+                f'{min_batch_size}. '
+            )
+            result = _drop_subjects(min_batch_size)
+        return result
+
+    def _delete_reference_triples(self, triples_to_delete, node_uri, node_type_label, method_log_prefix, graph_uri):
+        '''
+        Delete references that point to a node.
+
+        :param triples_to_delete: Triples to remove.
+        :type triples_to_delete: List[tuple[str, str, str]]
+
+        :param node_uri: URI of node whose references are removed.
+        :type node_uri: str
+
+        :param node_type_label: Label used only in logs.
+        :type node_type_label: str
+
+        :param method_log_prefix: Prefix used in log lines.
+        :type method_log_prefix: str
+
+        :param graph_uri: Graph URI used in logs.
+        :type graph_uri: str
+
+        :return: Query result or None if no triples.
+        :rtype: QueryResult | None
+        '''
+        if not triples_to_delete:
+            return None
+
+        result = self._drop_triples_in_graph(triples_to_delete)
+        log.info(
+            f'{method_log_prefix} Deleted {len(triples_to_delete)} reference triples '
+            f'for {node_type_label} {node_uri} in graph {graph_uri}'
+        )
+        return result
+
+    def _process_uri_batches(self, uris, batch_handler, method_log_prefix, batch_size=None):
+        '''
+        Process URIs in fixed-size batches.
+
+        :param uris: URIs to process.
+        :type uris: List[str]
+
+        :param batch_handler: Callback invoked with one URI batch.
+        :type batch_handler: Callable[[List[str]], None]
+
+        :param method_log_prefix: Prefix used in log lines.
+        :type method_log_prefix: str
+
+        :param batch_size: Maximum URIs per batch. Defaults to update batch size.
+        :type batch_size: int | None
+        '''
+        if not uris:
+            return
+
+        batch_size = batch_size or RDFStoreHelper.BATCH_SIZE_FOR_UPDATES
+        total_uris = len(uris)
+        total_batches = math.ceil(total_uris / batch_size)
+        for i in range(0, total_uris, batch_size):
+            batch_number = i // batch_size + 1
+            current_uris = uris[i:i+batch_size]
+            batch_handler(current_uris)
+            log.info(
+                f'{method_log_prefix} Processed URI batch {batch_number}/{total_batches} '
+                f'with {len(current_uris)} URIs'
+            )
+
     @log_debug
     def delete_catalogs_in_graph(self, catalog_uris: List[str]) -> List[QueryResult]:
         '''
@@ -68,8 +195,8 @@ class RDFStoreDelete(RDFStoreHelper):
                     result = self._get_results_by_query(query)
                     log.info(f'{method_log_prefix} Deleted data of catalogs {catalog} in graph {graph_uri}')
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred deleting catalogs in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred deleting catalogs in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result
 
     @log_debug
@@ -106,12 +233,18 @@ class RDFStoreDelete(RDFStoreHelper):
 
             # Deletion query for the dataservice
             result = self._drop_triples_in_graph([(self._get_uriref_to_query(dataservice_uri), '?p', '?o')])
-            result = self._drop_triples_in_graph(triples_to_delete)
+            result = self._delete_reference_triples(
+                triples_to_delete,
+                dataservice_uri,
+                'dataservice',
+                method_log_prefix,
+                graph_uri
+            ) or result
             log.info(f'{method_log_prefix} Deleted data of {dataservice_uri} in graph {graph_uri}')
 
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred deleting of {dataservice_uri} data in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred deleting of {dataservice_uri} data in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result
 
     @log_debug
@@ -129,6 +262,7 @@ class RDFStoreDelete(RDFStoreHelper):
         '''
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         graph_uri = self.get_graph_uri_to_query()
+        result = None
         try:
             if not dataset_uri:
                 log.info(f'{method_log_prefix} No dataset_uri to delete')
@@ -146,34 +280,41 @@ class RDFStoreDelete(RDFStoreHelper):
             # Find references to the dataset as an object in dataservices/servesDataset
             dataservice_list = self._get_subjects_by_predicate_and_object(DCAT.servesDataset, dataset_uri, True)
             triples_to_delete.extend([(f"{self._get_uriref_to_query(dataservice_uri)}", f"{self._get_uriref_to_query(DCAT.servesDataset)}", f"{self._get_uriref_to_query(dataset_uri)}") for dataservice_uri in dataservice_list or []])
-            triples_to_delete_str = '\n'.join([f"{URIRef(s)} {URIRef(p)} {URIRef(o)} ." for s, p, o in triples_to_delete])
             
             # Obtain IRIs of distributions linked to the dataset (distribution and sample)
             distribution_list = self._get_objects_by_subject_and_predicate(dataset_uri, DCAT.distribution, True)
             distribution_sample_list = self._get_objects_by_subject_and_predicate(dataset_uri, ADMS.sample, True)
             distribution_list.extend(distribution_sample_list)
-            filter_distributions = ''
-            if distribution_list:
-                distribution_list_str = [f"{self._get_uriref_to_query(distribution_uri)}" for distribution_uri in distribution_list]
-                distribution_list_str = ', '.join(distribution_list_str)
-                filter_distributions = f'?distribution ?p2 ?o2 . FILTER( ?distribution IN ({distribution_list_str})) .'
 
-            # Deletion query for the dataset
-            try:
-                query = f'''DELETE {{ GRAPH {graph_uri} {{ {self._get_uriref_to_query(dataset_uri)} ?p ?o . }} }} 
-                            WHERE {{ GRAPH {graph_uri} {{ {self._get_uriref_to_query(dataset_uri)} ?p ?o . {filter_distributions} {triples_to_delete_str} }} }}'''
-                result = self._get_results_by_query(query)
-                log.info(f'{method_log_prefix} Deleted data of {dataset_uri} in graph {graph_uri} using a single query')
-            except (RDFStoreInternalException) as e:
-                log.error(f'{method_log_prefix} An exception has occurred deleting of {dataset_uri} data in graph {graph_uri} using a single query. The deletion will be attempted in batch queries. {type(e).__name__}: {str(e)}')
-                query = f'''DELETE {{ GRAPH {graph_uri} {{ {self._get_uriref_to_query(dataset_uri)} ?p ?o . }} }} 
-                            WHERE {{ GRAPH {graph_uri} {{ {self._get_uriref_to_query(dataset_uri)} ?p ?o . {filter_distributions} }} }}'''
-                result = self._get_results_by_query(query)
-                result = self._drop_triples_in_graph(triples_to_delete)
-                log.info(f'{method_log_prefix} Deleted data of {dataset_uri} in graph {graph_uri} using batch queries')
+
+            result = self._drop_triples_in_graph([
+                (self._get_uriref_to_query(dataset_uri), '?p', '?o')
+            ])
+            log.info(f'{method_log_prefix} Deleted direct triples of dataset {dataset_uri} in graph {graph_uri}')
+
+
+            result = self._delete_reference_triples(
+                triples_to_delete,
+                dataset_uri,
+                'dataset',
+                method_log_prefix,
+                graph_uri
+            ) or result
+
+            # Phase 5: delete direct triples of related distributions/samples
+            if distribution_list:
+                distribution_triples_to_delete = [
+                    (self._get_uriref_to_query(distribution_uri), '?p', '?o')
+                    for distribution_uri in distribution_list
+                ]
+                result = self._drop_triples_in_graph(distribution_triples_to_delete)
+                log.info(
+                    f'{method_log_prefix} Deleted direct triples of {len(distribution_list)} '
+                    f'distributions/samples linked to dataset {dataset_uri} in graph {graph_uri}'
+                )
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred deleting of {dataset_uri} data in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred deleting of {dataset_uri} data in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result
 
     @log_debug
@@ -189,33 +330,42 @@ class RDFStoreDelete(RDFStoreHelper):
             graph_uri = self.get_graph_uri_to_query()
             root_catalog = self.get_root_catalog_uri()
             non_referenced_node_uris = None
-            MAX_NUM_OF_ITERATIONS = 20
+            MAX_NUM_OF_ITERATIONS = get_int_value_from_ckan_property(MAX_PREPROCESS_ITERATIONS_PROPERTY, 20)
+            BATCH_SIZE = get_int_value_from_ckan_property('ckanext.dge_harvest.preprocess.unreferenced_nodes_batch_size', 1000)
             iteration = 0
-            while True and iteration < MAX_NUM_OF_ITERATIONS:
-                # Find non referened_nodes
+            total_deleted_nodes = 0
+            while iteration < MAX_NUM_OF_ITERATIONS:
+                # Find only one batch of non referenced nodes to avoid loading the
+                # full candidate set into memory for very large graphs.
                 find_nodes_query = f""" SELECT DISTINCT ?node_subject FROM {graph_uri} WHERE {{ 
                     ?node_subject ?p ?o .
                     FILTER NOT EXISTS {{ ?s ?any_predicate ?node_subject }} # It is not an object
                     FILTER (?node_subject != {self._get_uriref_to_query(root_catalog)}) # Except root catalog
-                    }}"""
+                    }} LIMIT {BATCH_SIZE}"""
                 non_referenced_node_uris = self.get_objects_by_query(find_nodes_query, 'node_subject')
                 if not non_referenced_node_uris:
                     break
-                else:
-                    triples_to_delete = []
-                    for i, non_referenced_node_uri in enumerate(non_referenced_node_uris or [], start=0):
-                        unreferenced_nodes.add(str(non_referenced_node_uri))
-                        triples_to_delete = [(f'{self._get_uriref_to_query(non_referenced_node_uri)}', f'?p{i}', f'?o{i}') ]
-                        self._drop_triples_in_graph(triples_to_delete)
+
+                subjects_to_delete = []
+                for non_referenced_node_uri in non_referenced_node_uris or []:
+                    unreferenced_nodes.add(str(non_referenced_node_uri))
+                    subjects_to_delete.append(str(non_referenced_node_uri))
+
+                self._drop_subjects_in_graph(subjects_to_delete)
                 iteration +=1
-                log.debug(f'{method_log_prefix} Deleted all unreferenced nodes in {iteration} iterations.')
+                total_deleted_nodes += len(subjects_to_delete)
+                log.info(
+                    f'{method_log_prefix} Deleted batch {iteration}/{MAX_NUM_OF_ITERATIONS} '
+                    f'with {len(subjects_to_delete)} unreferenced nodes in graph '
+                    f'{graph_uri}. total_deleted={total_deleted_nodes}'
+                )
             if iteration == MAX_NUM_OF_ITERATIONS:
                 log.warning(f'{method_log_prefix} The maximum number of iterations has been reached. The node may not have been completely removed. It would be necessary to check that the queries are correct.')
                 raise RDFStoreInternalException(f'Unreferenced nodes {non_referenced_node_uris} have not been completely removed in graph {graph_uri}')
 
         except (KeyError, RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred deleting non referenced nodes in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred deleting non referenced nodes in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         log.debug(f'{method_log_prefix} End method')
         return unreferenced_nodes
 
@@ -245,8 +395,8 @@ class RDFStoreDelete(RDFStoreHelper):
             triples_to_delete = [(f'?s{i}', f'{self._get_uriref_to_query(DCT.hasPart)}', f'{self._get_uriref_to_query(result_uri)}') for i, result_uri in enumerate(result_uris or [], start=0)]
             self._drop_triples_in_graph(triples_to_delete)
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred removing undescribed catalogs in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred removing undescribed catalogs in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result_uris
 
     @log_debug
@@ -287,8 +437,8 @@ class RDFStoreDelete(RDFStoreHelper):
                 
                 log.info(f'{method_log_prefix} Removed undescribed {dcat_class_name}: {result_all_uris}')
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred removing undescribed {dcat_class_name}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred removing undescribed {dcat_class_name}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result_all_uris
 
     @log_debug
@@ -341,8 +491,8 @@ class RDFStoreDelete(RDFStoreHelper):
                 self._drop_triples_in_graph(triples_to_delete)
                 log.info(f'{method_log_prefix} Removed references of unreferenced {dcat_class_name} in {graph_uri}: {result_uris}')
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred removing unreferenced {dcat_class_name} in catalogs in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred removing unreferenced {dcat_class_name} in catalogs in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result_uris
 
     @log_debug
@@ -393,19 +543,20 @@ class RDFStoreDelete(RDFStoreHelper):
                             }}
                         }}
                         '''
-            result_uris = self.get_objects_by_query(query, subject_name)
-            # Delete all triples where node is object and delete unreferenced nodes
-            if result_uris:
-                result_uris_to_delete = ", ".join([self._get_uriref_to_query(result_uri) for result_uri in result_uris])
-                query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }} 
-                            WHERE {{ GRAPH {graph_uri} {{  ?s ?p ?o .  FILTER (?o IN ({result_uris_to_delete})) }} }}'''
-                self._get_results_by_query(query)
-                log.info(f'{method_log_prefix} Removed unreferenced described {dcat_class_name} in {graph_uri}: {result_uris}')
-                self.drop_all_unreferenced_nodes()
+                result_uris = self.get_objects_by_query(query, subject_name)
+                if result_uris:
+                    def _delete_uri_batch(current_uris):
+                        batch_uris = ", ".join([self._get_uriref_to_query(result_uri) for result_uri in current_uris])
+                        delete_query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }} 
+                                           WHERE {{ GRAPH {graph_uri} {{  ?s ?p ?o .  FILTER (?o IN ({batch_uris})) }} }}'''
+                        self._get_results_by_query(delete_query)
+
+                    self._process_uri_batches(result_uris, _delete_uri_batch, method_log_prefix)
+                    log.info(f'{method_log_prefix} Removed unreferenced described {dcat_class_name} in {graph_uri}: {result_uris}')
             
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred removing undescribed {dcat_class_name} in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred removing undescribed {dcat_class_name} in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result_uris
 
     @log_debug
@@ -420,9 +571,8 @@ class RDFStoreDelete(RDFStoreHelper):
         '''
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         graph_uri = self.get_graph_uri_to_query()
+        result_uris = []
         try:
-            query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }} 
-                        WHERE {{ GRAPH {graph_uri} {{  ?s ?p ?o . FILTER (?p in {self._get_uriref_to_query(FOAF.primaryTopic)}, {self._get_uriref_to_query(DCAT.record)} ) }} }}'''
             subject_name ='catalog_record_1' 
             query = f'''
                 SELECT DISTINCT ?{subject_name} FROM {graph_uri} WHERE {{ 
@@ -431,14 +581,20 @@ class RDFStoreDelete(RDFStoreHelper):
                 '''
             result_uris = self.get_objects_by_query(query, subject_name)
             if result_uris:
-                query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }} 
-                            WHERE {{ GRAPH {graph_uri} {{  ?s ?p ?o . FILTER (?o IN ({", ".join([self._get_uriref_to_query(result_uri) for result_uri in result_uris])})) }} }}'''
-                self._get_results_by_query(query)
+                def _delete_uri_batch(current_uris):
+                    batch_uris = ", ".join([self._get_uriref_to_query(result_uri) for result_uri in current_uris])
+                    delete_query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }} 
+                                       WHERE {{ GRAPH {graph_uri} {{ 
+                                           ?s ?p ?o .
+                                           FILTER (?s IN ({batch_uris}) || ?o IN ({batch_uris}))
+                                       }} }}'''
+                    self._get_results_by_query(delete_query)
+
+                self._process_uri_batches(result_uris, _delete_uri_batch, method_log_prefix)
                 log.info(f'{method_log_prefix} Removed catalog records in {graph_uri}')
-                self.drop_all_unreferenced_nodes()
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred removing catalog records in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred removing catalog records in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return result_uris
 
     @log_debug
@@ -459,8 +615,8 @@ class RDFStoreDelete(RDFStoreHelper):
             self._get_results_by_query(query)
             log.info(f'{method_log_prefix} Removed pagination data in {graph_uri}')
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred removing undescribed dataservices in graph {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred removing undescribed dataservices in graph {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return None
 
     @log_debug
@@ -483,15 +639,17 @@ class RDFStoreDelete(RDFStoreHelper):
             
             uris_publishers_and_creators = self.get_objects_by_query(query, 'o')
             if uris_publishers_and_creators:
-                # Delete triples where publisher is a subject
-                metadata_query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }} WHERE {{  GRAPH {graph_uri} {{ ?s ?p ?o . 
-                    FILTER (?s IN ({", ".join([self._get_uriref_to_query(uri) for uri in uris_publishers_and_creators])})) }} }}'''
-                self._get_results_by_query(metadata_query)
+                def _delete_uri_batch(current_uris):
+                    batch_uris = ", ".join([self._get_uriref_to_query(uri) for uri in current_uris])
+                    metadata_query = f'''DELETE {{ GRAPH {graph_uri} {{ ?s ?p ?o . }} }} WHERE {{  GRAPH {graph_uri} {{ ?s ?p ?o . 
+                        FILTER (?s IN ({batch_uris})) }} }}'''
+                    self._get_results_by_query(metadata_query)
+
+                self._process_uri_batches(uris_publishers_and_creators, _delete_uri_batch, method_log_prefix)
                 log.info(f'{method_log_prefix} Removed data of publihsers in {graph_uri}: {uris_publishers_and_creators}')
-                self.drop_all_unreferenced_nodes()
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred deleting data from nti-risp publishers and creators in graph = {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred deleting data from nti-risp publishers and creators in graph = {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e
         return uris_publishers_and_creators
     
     @log_debug
@@ -523,5 +681,5 @@ class RDFStoreDelete(RDFStoreHelper):
             log.info(f'{method_log_prefix} Deleted internal metadata of {dataset_or_dataservice_uri} and its catalog record in {graph_uri}: {uris_publishers_and_creators}')
             self.drop_all_unreferenced_nodes()
         except (RDFStoreInternalException) as e:
-            log.error(f'{method_log_prefix} An exception has occurred deleting internal metadata of the dataset or dataservice {dataset_or_dataservice_uri} and its CatalogRecord in graph = {graph_uri}. {type(e).__name__}: {str(e)}')
-            raise self._get_raise_exception(e)
+            log.exception(f'{method_log_prefix} An exception has occurred deleting internal metadata of the dataset or dataservice {dataset_or_dataservice_uri} and its CatalogRecord in graph = {graph_uri}. {type(e).__name__}: {str(e)}')
+            raise self._get_raise_exception(e) from e

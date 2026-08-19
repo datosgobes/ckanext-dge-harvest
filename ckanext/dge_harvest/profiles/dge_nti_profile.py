@@ -152,41 +152,141 @@ class DGENTIProfile(DGEProfile):
     dataset_errors = []
     catalog_warnings = []
     dataset_warnings = []
+    catalog_error_details = []
+    dataset_error_details = []
+    catalog_warning_details = []
+    dataset_warning_details = []
 
     def _initialize_parse_utils(self):
         if self.base_parse_utils == None:
             self.base_parse_utils = BaseProfileParseUtilsBase(self.g)
-    
-    def _add_warningmsg(self, warningmsg=None, isCatalog=False, prefix=None):
+
+    def _build_message_detail(
+        self,
+        message,
+        level,
+        isCatalog=False,
+        prefix=None,
+        resource_uri=None,
+        scope=None,
+        exception=None,
+    ):
+        """Build structured side context for one NTI profile message.
+
+        The NTI flow still consumes plain strings, but the profile can preserve
+        useful context in parallel so later harvester layers do not need to
+        reconstruct it from free-form text.
+        """
+        return super()._build_message_detail(
+            message=message,
+            level=level,
+            scope=scope or ("catalog" if isCatalog else getattr(self, "_current_message_scope", "dataset")),
+            prefix=prefix,
+            resource_uri=resource_uri,
+            exception=exception,
+        )
+
+    def _set_current_message_context(self, resource_uri=None, scope=None, prefix_msg=None):
+        """Update current implicit message context for nested parser helpers."""
+        self._current_resource_uri = resource_uri
+        if scope:
+            self._current_message_scope = scope
+        if prefix_msg:
+            self._current_message_prefix_msg = prefix_msg
+
+    def _add_warningmsg(
+        self,
+        warningmsg=None,
+        isCatalog=False,
+        prefix=None,
+        resource_uri=None,
+        scope=None,
+        exception=None,
+    ):
         '''
         If warningmsg... add the given warning message to catalog_warning list
         if isCatalog is True, or to dataset_wargning list in other case
         '''
         method_log_prefix = f'[{type(self).__name__}][_add_warningmsg]'
+        prefix = prefix or (getattr(self, "_current_message_prefix_msg", None))
+        if prefix and len(prefix) > 0:
+            warningmsg = f"[{prefix}] {warningmsg}"
         if warningmsg is not None and warningmsg:
-            if prefix and len(prefix) > 0:
-                warningmsg = f"[{prefix}]{warningmsg}"
             if isCatalog and warningmsg not in self.catalog_warnings:
                 self.catalog_warnings.append(warningmsg)
+                self.catalog_warning_details.append(
+                    self._build_message_detail(
+                        message=warningmsg,
+                        level="warning",
+                        isCatalog=True,
+                        prefix=prefix,
+                        resource_uri=resource_uri,
+                        scope=scope,
+                        exception=exception,
+                    )
+                )
                 log.info(f"{method_log_prefix} Adding catalog_warning... {warningmsg}")
             elif not isCatalog and warningmsg not in self.dataset_warnings:
                 self.dataset_warnings.append(warningmsg)
+                self.dataset_warning_details.append(
+                    self._build_message_detail(
+                        message=warningmsg,
+                        level="warning",
+                        isCatalog=False,
+                        prefix=prefix,
+                        resource_uri=resource_uri,
+                        scope=scope,
+                        exception=exception,
+                    )
+                )
                 log.info(f"{method_log_prefix} Adding dataset_warning... {warningmsg}")
 
-    def _add_errormsg(self, errormsg=None, isCatalog=False, prefix=None):
+    def _add_errormsg(
+        self,
+        errormsg=None,
+        isCatalog=False,
+        prefix=None,
+        resource_uri=None,
+        scope=None,
+        exception=None,
+    ):
         '''
         If errosmsg... add the given error message to catalog_errors list
         if isCatalog is True, or to dataset_errors in other case
         '''
         method_log_prefix = f'[{type(self).__name__}][_add_errormsg]'
+        prefix = prefix or getattr(self, "_current_message_prefix_msg", None)
+        
         if errormsg is not None and errormsg:
             if prefix and len(prefix) > 0:
-                errormsg = f"[{prefix}]{errormsg}"
+                errormsg = f"[{prefix}] {errormsg}"
             if isCatalog and errormsg not in self.catalog_errors:
                 self.catalog_errors.append(errormsg)
+                self.catalog_error_details.append(
+                    self._build_message_detail(
+                        message=errormsg,
+                        level="error",
+                        isCatalog=True,
+                        prefix=prefix,
+                        resource_uri=resource_uri,
+                        scope=scope,
+                        exception=exception,
+                    )
+                )
                 log.info(f"{method_log_prefix} Adding catalog_error... {errormsg}")
             elif not isCatalog and errormsg not in self.dataset_errors:
                 self.dataset_errors.append(errormsg)
+                self.dataset_error_details.append(
+                    self._build_message_detail(
+                        message=errormsg,
+                        level="error",
+                        isCatalog=False,
+                        prefix=prefix,
+                        resource_uri=resource_uri,
+                        scope=scope,
+                        exception=exception,
+                    )
+                )
                 log.info(f"{method_log_prefix} Adding dataset_error... {errormsg}")
 
     def _time_interval_coverage(self, interval):
@@ -639,6 +739,13 @@ class DGENTIProfile(DGEProfile):
             dataset_dict = {}
         self.dataset_errors = []
         self.dataset_warnings = []
+        self.dataset_error_details = []
+        self.dataset_warning_details = []
+        self._set_current_message_context(
+            resource_uri=dataset_ref,
+            scope="dataset",
+            prefix_msg = NTIDatasetConstants.METADATA_DATASET_PREFIX_MESSAGE.format(dataset_ref)
+        )
         isCatalog = False
         actual_field = None
         dataset_license_tmp = ''
@@ -682,6 +789,8 @@ class DGENTIProfile(DGEProfile):
             dataset_dict[NTIDatasetConstants.KEY_TYPE] = CommonPackageConstants.KEY_TYPE_DATASET_VALUE
             dataset_dict[NTIDatasetConstants.KEY_ERRORS] = []
             dataset_dict[NTIDatasetConstants.KEY_WARNINGS] = []
+            dataset_dict[CommonPackageConstants.KEY_ERROR_DETAILS] = []
+            dataset_dict[CommonPackageConstants.KEY_WARNING_DETAILS] = []
 
             do_parsing = True
             # check leng dataset_ref
@@ -801,8 +910,8 @@ class DGENTIProfile(DGEProfile):
                         else:
                             self._add_errormsg(NTIHarvesterConstants.WRONG_URI.format(actual_field, dsIdentifier), isCatalog)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
-                    log.debug(traceback.format_exc())
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
+                    log.exception(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.identifier...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_IDENTIFIER, 'None')}")
 
                 # Creation date (dct:issued) - optional, single
@@ -816,7 +925,7 @@ class DGENTIProfile(DGEProfile):
                         dataset_dict[NTIDatasetConstants.KEY_DATASET_ISSUED_DATE] = self._validate_iso8601_date(
                             cDate, cType)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.issued...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_ISSUED_DATE, 'None')}")
 
@@ -831,7 +940,7 @@ class DGENTIProfile(DGEProfile):
                         dataset_dict[NTIDatasetConstants.KEY_DATASET_MODIFIED_DATE] = self._validate_iso8601_date(
                             uDate, uType)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.modified...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_MODIFIED_DATE, 'None')}")
 
@@ -846,7 +955,7 @@ class DGENTIProfile(DGEProfile):
                         else:
                             self._add_warningmsg(NTIHarvesterConstants.RECEIVED_VALUE.format(actual_field, f_value), isCatalog)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.accrualPeriodicity...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_FREQUENCY, 'None')}")
 
@@ -903,7 +1012,7 @@ class DGENTIProfile(DGEProfile):
                                         actual_field, (NTIPrefixConstants.PUBLISHER_PREFIX + idminhap)),
                                     isCatalog)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.publisher...{dataset_dict.get(NTIDatasetConstants.KEY_PUBLISHER_ID_MINHAP, 'None')}")
 
@@ -920,7 +1029,7 @@ class DGENTIProfile(DGEProfile):
                             self._add_errormsg(NTIHarvesterConstants.WRONG_URL.format(
                                 actual_field, license), isCatalog)
                 except RDFParserException as e:
-                    self._add_errormsg(f"{actual_field}: {str(e)}", isCatalog)
+                    self._add_errormsg(f"{actual_field}: {str(e)}", isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.license...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_LICENSE, 'None')}")
 
@@ -978,7 +1087,7 @@ class DGENTIProfile(DGEProfile):
                             index += 1
                 except RDFParserException as e:
                     self._add_errormsg(
-                        NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, (str(e) if hasattr(e, 'message') else e)), isCatalog)
+                        NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, (str(e) if hasattr(e, 'message') else e)), isCatalog, exception=e)
                 log.debug(f"{method_log_prefix} Parsed dataset DCT.temporal...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_TEMPORAL_COVERAGE, 'None')}")
 
                 # Validity of resource (dct:valid) - optional, single
@@ -992,7 +1101,7 @@ class DGENTIProfile(DGEProfile):
                         dataset_dict[NTIDatasetConstants.KEY_DATASET_VALID] = self._validate_iso8601_date(
                             vDate, vType)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
                 log.debug(
                     f"{method_log_prefix} Parsed dataset DCT.valid...{dataset_dict.get(NTIDatasetConstants.KEY_DATASET_VALID, 'None')}")
 
@@ -1044,26 +1153,53 @@ class DGENTIProfile(DGEProfile):
                 numDistributions = 0
                 for distribution in self._distributions(dataset_ref):
                     resource_dict = {}
-                    if distribution:                        
+                    if distribution:
+                        distribution_uri_ref = self._get_uri_ref(distribution)
+                        prefix_msg = NTIDatasetConstants.METADATA_DISTRIBUTION_PREFIX_MESSAGE.format(
+                            self._get_uri_ref(distribution) or NTIDatasetConstants.METADATA_DISTRIBUTION_NO_IDENTIFIER , str(dataset_ref)
+                        )
+                        
+                        self._set_current_message_context(
+                            resource_uri=distribution_uri_ref,
+                            scope="distribution",
+                            prefix_msg = prefix_msg
+                        )
                         # Identifier (dct:identifier) - optional, single
                         log.debug(f"{method_log_prefix} Parsing distribution DCT.identifier...")
                         actual_field = NTIDatasetConstants.METADATA_DISTRIBUTION_IDENTIFIER
-                        prefix_msg = NTIDatasetConstants.METADATA_DISTRIBUTION_PREFIX_MESSAGE.format(
-                            NTIDatasetConstants.METADATA_DISTRIBUTION_NO_IDENTIFIER)
-
+                        
+                        # The import fails if resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_IDENTIFIER]
+                        # is not included, , even if it is empty
                         resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_IDENTIFIER] = ''
                         try:
                             dIdentifier = self._strip_value(
                                 self._object_value(distribution, DCT.identifier))
                             if not self._check_empty_field(dIdentifier, actual_field, isCatalog, False, False, prefix_msg):
                                 prefix_msg = NTIDatasetConstants.METADATA_DISTRIBUTION_PREFIX_MESSAGE.format(
-                                    dIdentifier)
+                                    self._get_uri_ref(distribution) or dIdentifier, str(dataset_ref))
+                                self._set_current_message_context(
+                                    resource_uri=distribution_uri_ref,
+                                    scope="distribution",
+                                    prefix_msg = prefix_msg
+                                )
                                 if self._is_uri(dIdentifier):
                                     resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_IDENTIFIER] = dIdentifier
                                 else:
-                                    self._add_errormsg(NTIHarvesterConstants.WRONG_URI.format(actual_field, dIdentifier), isCatalog, prefix_msg)
+                                    self._add_errormsg(
+                                        NTIHarvesterConstants.WRONG_URI.format(actual_field, dIdentifier),
+                                        isCatalog,
+                                        prefix_msg,
+                                        resource_uri=str(distribution),
+                                        scope="distribution",
+                                    )
                         except RDFParserException as e:
-                            self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, prefix_msg)
+                            self._add_errormsg(
+                                NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)),
+                                isCatalog,
+                                prefix_msg,
+                                resource_uri=str(distribution),
+                                scope="distribution", exception=e
+                            )
                             log.debug(traceback.format_exc())
                         log.debug(f"{method_log_prefix} Parsed distribution DCT.identifier...{resource_dict.get(NTIDatasetConstants.KEY_DATASET_RESOURCE_IDENTIFIER, 'None')}")
 
@@ -1089,11 +1225,21 @@ class DGENTIProfile(DGEProfile):
                                     resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_EXTRA_ACCESS_URL] = [durl]
                                     log.debug(f"{durl} Ascii code distribution DCAT.accesURL...")
                                 else:
-                                    self._add_errormsg(NTIHarvesterConstants.WRONG_URL.format(
-                                        actual_field, durl), isCatalog, prefix_msg)
+                                    self._add_errormsg(
+                                        NTIHarvesterConstants.WRONG_URL.format(actual_field, durl),
+                                        isCatalog,
+                                        prefix_msg,
+                                        resource_uri=str(distribution),
+                                        scope="distribution",
+                                    )
                         except RDFParserException as e:
-                            self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog,
-                                               prefix_msg)
+                            self._add_errormsg(
+                                NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)),
+                                isCatalog,
+                                prefix_msg,
+                                resource_uri=str(distribution),
+                                scope="distribution", exception=e
+                            )
                             log.debug(traceback.format_exc())
                         log.debug(f"{method_log_prefix} Parsed distribution DCAT.accessURL...{resource_dict.get(NTIDatasetConstants.KEY_DATASET_RESOURCE_ACCESS_URL, 'None')}")
 
@@ -1113,14 +1259,29 @@ class DGENTIProfile(DGEProfile):
                                 resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_FORMAT] = final_value
                                 resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_MEDIATYPE] = NTIPrefixConstants.FORMAT_PREFIX_EDP_IANA + final_value
                                 if imt != final_value:
-                                    self._add_warningmsg(NTIHarvesterConstants.FORMAT_NO_CASE_SENSITIVE.format(actual_field, imt), isCatalog,
-                                                         prefix_msg)
+                                    self._add_warningmsg(
+                                        NTIHarvesterConstants.FORMAT_NO_CASE_SENSITIVE.format(actual_field, imt),
+                                        isCatalog,
+                                        prefix_msg,
+                                        resource_uri=str(distribution),
+                                        scope="distribution",
+                                    )
                             else:
-                                self._add_errormsg(NTIHarvesterConstants.UNEXPECTED_VALUE.format(
-                                    actual_field, imt), isCatalog, prefix_msg)
+                                self._add_errormsg(
+                                    NTIHarvesterConstants.UNEXPECTED_VALUE.format(actual_field, imt),
+                                    isCatalog,
+                                    prefix_msg,
+                                    resource_uri=str(distribution),
+                                    scope="distribution",
+                                )
                         else:
-                            self._add_errormsg(NTIHarvesterConstants.REQUIRED_FIELD_NOT_FOUND.format(
-                                actual_field), isCatalog, prefix_msg)
+                            self._add_errormsg(
+                                NTIHarvesterConstants.REQUIRED_FIELD_NOT_FOUND.format(actual_field),
+                                isCatalog,
+                                prefix_msg,
+                                resource_uri=str(distribution),
+                                scope="distribution",
+                            )
                         log.debug(f"{method_log_prefix} Parsed distribution DCT.mediaType...{resource_dict.get(NTIDatasetConstants.KEY_DATASET_RESOURCE_FORMAT, 'None')}")
 
                         # distribution size (dcat:byteSize) - optional, single
@@ -1132,8 +1293,11 @@ class DGENTIProfile(DGEProfile):
                             if size:
                                 resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_BYTE_SIZE] = size
                         except RDFParserException as e:
-                            self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(
-                                actual_field, str(e), prefix_msg))
+                            self._add_errormsg(
+                                NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e), prefix_msg, exception=e),
+                                resource_uri=str(distribution),
+                                scope="distribution",
+                            )
                             log.debug(traceback.format_exc())
                         log.debug(f"{method_log_prefix} Parsed distribution DCT.byteSize...{resource_dict.get(NTIDatasetConstants.KEY_DATASET_RESOURCE_BYTE_SIZE, 'None')}")
 
@@ -1158,16 +1322,31 @@ class DGENTIProfile(DGEProfile):
                                                 resource_relations.append(
                                                     dRelationValue)
                                             else:
-                                                self._add_errormsg(NTIHarvesterConstants.WRONG_URL.format(actual_field, dRelationValue),
-                                                                   isCatalog, prefix_msg)
+                                                self._add_errormsg(
+                                                    NTIHarvesterConstants.WRONG_URL.format(actual_field, dRelationValue),
+                                                    isCatalog,
+                                                    prefix_msg,
+                                                    resource_uri=str(distribution),
+                                                    scope="distribution",
+                                                )
                                     except RDFParserException as e:
-                                        self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)),
-                                                           isCatalog, prefix_msg)
+                                        self._add_errormsg(
+                                            NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)),
+                                            isCatalog,
+                                            prefix_msg,
+                                            resource_uri=str(distribution),
+                                            scope="distribution", exception=e,
+                                        )
                                         log.debug(traceback.format_exc())
                         if len(resource_relations) > 0:
                             resource_dict[NTIDatasetConstants.KEY_DATASET_RESOURCE_RELATION] = resource_relations
                         dataset_dict[NTIDatasetConstants.KEY_RESOURCES].append(resource_dict)
                         log.debug(f"{method_log_prefix} Parsed distribution DCT.relation...{resource_dict.get(NTIDatasetConstants.KEY_DATASET_RESOURCE_RELATION, 'None')}")
+                        self._set_current_message_context(
+                            resource_uri=dataset_ref,
+                            scope="dataset",
+                            prefix_msg = NTIDatasetConstants.METADATA_DATASET_PREFIX_MESSAGE.format(dataset_ref),
+                        )
                         numDistributions += 1
                 actual_field = NTIDatasetConstants.METADATA_DATASET_DISTRIBUTIONS
                 if numDistributions == 0:
@@ -1178,15 +1357,22 @@ class DGENTIProfile(DGEProfile):
 
         except Exception as e:
             if not actual_field:
-                self._add_errormsg(NTIHarvesterConstants.UNEXPECTED_ERROR.format(type(e).__name__, e), isCatalog)
+                self._add_errormsg(NTIHarvesterConstants.UNEXPECTED_ERROR.format(type(e).__name__, e), isCatalog, exception=e)
                 log.debug(traceback.format_exc())
             else:
                 self._add_errormsg(NTIHarvesterConstants.UNEXPECTED_FIELD_ERROR.format(
-                    actual_field, type(e).__name__, e), isCatalog)
+                    actual_field, type(e).__name__, e), isCatalog, exception=e)
                 log.debug(traceback.format_exc())
 
         dataset_dict[NTIDatasetConstants.KEY_ERRORS].extend(self.dataset_errors)
         dataset_dict[NTIDatasetConstants.KEY_WARNINGS].extend(self.dataset_warnings)
+        dataset_dict[CommonPackageConstants.KEY_ERROR_DETAILS].extend(
+            self.dataset_error_details
+        )
+        dataset_dict[CommonPackageConstants.KEY_WARNING_DETAILS].extend(
+            self.dataset_warning_details
+        )
+        #log.debug(f'{method_log_prefix} End method. Returns dataset_dict={dataset_dict}')
         return dataset_dict
 
     def parse_catalog(self, catalog_dict, catalog_ref):
@@ -1197,6 +1383,14 @@ class DGENTIProfile(DGEProfile):
         catalog_dict[NTICatalogConstants.KEY_CATALOG_WARNINGS] = []
         self.catalog_errors = []
         self.catalog_warnings = []
+        self.catalog_error_details = []
+        self.catalog_warning_details = []
+        catalog_uri_ref = self._get_uri_ref(catalog_ref)
+        self._set_current_message_context(
+            resource_uri=catalog_uri_ref,
+            scope="catalog",
+            prefix_msg = NTICatalogConstants.METADATA_CATALOG_PREFIX_MESSAGE.format(catalog_uri_ref),
+        )
         self._initialize_parse_utils()
 
         isCatalog = True
@@ -1317,7 +1511,7 @@ class DGENTIProfile(DGEProfile):
                                     NTIHarvesterConstants.UNEXPECTED_PUBLISHER.format(actual_field, (NTIPrefixConstants.PUBLISHER_PREFIX + idminhap)),
                                     isCatalog)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)))
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed catalog DCT.publisher....{catalog_dict.get(NTICatalogConstants.KEY_CATALOG_PUBLISHER_ID_MINHAP, 'None')}")
 
@@ -1338,7 +1532,7 @@ class DGENTIProfile(DGEProfile):
                             self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, NTIHarvesterConstants.UNEXPECTED_MULTIPLE_OBJECTS),
                                                isCatalog)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(
                     f"{method_log_prefix}  Parsed catalog DCT.extent....{catalog_dict.get(NTICatalogConstants.KEY_CATALOG_SIZE, 'None')}")
@@ -1356,7 +1550,7 @@ class DGENTIProfile(DGEProfile):
                                 actual_field, cIdentifier), isCatalog)
                 except RDFParserException as e:
                     self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format
-                                       (actual_field, str(e)), isCatalog)
+                                       (actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed catalog DCT.identifier....{catalog_dict.get(NTICatalogConstants.KEY_CATALOG_IDENTIFIER, 'None')}")
 
@@ -1372,7 +1566,7 @@ class DGENTIProfile(DGEProfile):
                             cDate, cType)
                 except RDFParserException as e:
                     self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format
-                                       (actual_field, str(e)), isCatalog)
+                                       (actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed catalog DCT.issued....{catalog_dict.get(NTICatalogConstants.KEY_CATALOG_ISSUED_DATE, 'None')}")
 
@@ -1387,7 +1581,7 @@ class DGENTIProfile(DGEProfile):
                         catalog_dict[NTICatalogConstants.KEY_CATALOG_MODIFIED_DATE] = self._validate_iso8601_date(
                             uDate, uType)
                 except RDFParserException as e:
-                    self._add_errormsg(f"{actual_field}, {str(e)}", isCatalog)
+                    self._add_errormsg(f"{actual_field}, {str(e)}", isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed catalog DCT.modified....{catalog_dict.get(NTICatalogConstants.KEY_CATALOG_MODIFIED_DATE, 'None')}")
 
@@ -1474,7 +1668,7 @@ class DGENTIProfile(DGEProfile):
                                 actual_field, homepage), isCatalog)
                 except RDFParserException as e:
                     self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format
-                                       (actual_field, str(e)), isCatalog)
+                                       (actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed catalog FOAF.homepage....{catalog_dict.get(NTICatalogConstants.KEY_CATALOG_HOMEPAGE, 'None')}")
 
@@ -1490,7 +1684,7 @@ class DGENTIProfile(DGEProfile):
                         else:
                             self._add_errormsg(NTIHarvesterConstants.WRONG_URL.format(actual_field, license), isCatalog)
                 except RDFParserException as e:
-                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog)
+                    self._add_errormsg(NTIHarvesterConstants.FIELD_PLUS_MESSAGE.format(actual_field, str(e)), isCatalog, exception=e)
                     log.debug(traceback.format_exc())
                 log.debug(f"{method_log_prefix} Parsed catalog DC.license....{catalog_dict.get(NTICatalogConstants.KEY_CATALOG_LICENSE, 'None')}")
 
@@ -1507,15 +1701,21 @@ class DGENTIProfile(DGEProfile):
 
         except Exception as e:
             if not actual_field:
-                self._add_errormsg(NTIHarvesterConstants.UNEXPECTED_ERROR.format(type(e).__name__, e), isCatalog)
+                self._add_errormsg(NTIHarvesterConstants.UNEXPECTED_ERROR.format(type(e).__name__, e), isCatalog, exception=e)
                 log.debug(traceback.format_exc())
             else:
                 self._add_errormsg(NTIHarvesterConstants.UNEXPECTED_FIELD_ERROR.format(
-                    actual_field, type(e).__name__, e), isCatalog)
+                    actual_field, type(e).__name__, e), isCatalog, exception=e)
                 log.debug(traceback.format_exc())
 
         catalog_dict[NTICatalogConstants.KEY_CATALOG_ERRORS].extend(self.catalog_errors)
         catalog_dict[NTICatalogConstants.KEY_CATALOG_WARNINGS].extend(self.catalog_warnings)
+        catalog_dict[CommonPackageConstants.KEY_ERROR_DETAILS] = list(
+            self.catalog_error_details
+        )
+        catalog_dict[CommonPackageConstants.KEY_WARNING_DETAILS] = list(
+            self.catalog_warning_details
+        )
         log.debug(f'{method_log_prefix} End method. Returns catalog_dict={catalog_dict}')
         return catalog_dict
 

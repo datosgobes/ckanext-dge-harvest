@@ -157,8 +157,6 @@ class RDFExportGenerator():
         method_log_prefix = self._get_log_prefix(inspect.currentframe().f_code.co_name)
         harvest_source_graph = self._get_graph_uri(harvest_source_id)
         log.info(f'{method_log_prefix} Exporting harvested source with id {harvest_source_id} from graph {harvest_source_graph}')
-        offset = 0
-        complete_graph = False
         if not rdf_store:
             rdf_store = RDFStoreQuery(harvest_source_graph)
         else:
@@ -173,53 +171,255 @@ class RDFExportGenerator():
             log.info(f'{method_log_prefix} Graph {harvest_source_graph} is not exported because it does not have a root catalog')
             return
         _all_subcatalogs.add(root_catalog_uri)
-        datasets_european_themes_dict = {}
-        catalogs_with_european_theme_taxonomy = []
-        datasets_and_dataservices_with_european_themes = []
-        if self._is_edp:
-            # get catalogs with european theme taxonomy
-            catalogs_with_european_theme_taxonomy = rdf_store.get_catalogs_with_europan_theme_taxonomy()
-            # get datasets/dataservices with european themes
-            datasets_and_dataservices_with_european_themes = rdf_store.get_entities_with_europan_themes()
-        while not complete_graph:
-            # Set paginated query to get triples blocks
-            page_graph = rdf_store.get_and_parse_graph(offset)
-            
-            offset += rdf_store.max_triples_per_query
-            complete_graph = (len(page_graph) == 0)
-            # Update used namespaces in graph
-            self._update_namespaces_used_in_graph(page_graph, rdf_xml_parser)
-            
-            # Get creators or publishers to export datos.gob.es organization data if it is an datos.gob.es organization
-            creators_and_publishers = {o for _, _, o in page_graph.triples((None, DCT.creator, None))}
-            creators_and_publishers = creators_and_publishers.union({o for _, _, o in page_graph.triples((None, DCT.publisher, None))})
-            for creator_or_publisher in creators_and_publishers:
-                if isinstance(creator_or_publisher, URIRef):
-                    rdf_xml_parser.check_if_is_an_available_organization(str(creator_or_publisher))
+        log.info(f'{method_log_prefix} Root catalog for graph {harvest_source_graph}: {root_catalog_uri}')
+        export_context = self._get_harvested_export_context(rdf_store, rdf_xml_parser)
+        log.info(
+            f'{method_log_prefix} Starting streamed export of graph {harvest_source_graph} with '
+            f'entity batch size {self._get_harvested_entities_batch_size()}'
+        )
+        exported_catalogs = self._export_harvested_catalog_nodes(
+            rdf_store,
+            rdf_xml_parser,
+            root_catalog_uri,
+            harvest_source_graph,
+            method_log_prefix,
+            export_context,
+        )
+        exported_datasets = self._export_harvested_entities_by_type(
+            rdf_store,
+            rdf_xml_parser,
+            root_catalog_uri,
+            harvest_source_graph,
+            method_log_prefix,
+            export_context,
+            DcatClassNameEnum.DATASET,
+        )
+        exported_dataservices = self._export_harvested_entities_by_type(
+            rdf_store,
+            rdf_xml_parser,
+            root_catalog_uri,
+            harvest_source_graph,
+            method_log_prefix,
+            export_context,
+            DcatClassNameEnum.DATASERVICE,
+        )
 
-            if self._is_edp:
-                self.add_european_theme_taxomony_to_catalog_in_graph(page_graph, catalogs_with_european_theme_taxonomy)
-                self.add_european_theme_to_dataset_in_graph(page_graph, datasets_and_dataservices_with_european_themes, datasets_european_themes_dict)
-            subcatalog_page = page_graph.serialize(format=SERIALIZED_FORMAT).encode('utf-8')
-            rdf_xml_parser.append_subcatalog(subcatalog_page, root_catalog_uri)
-            page_graph.remove((None, None, None))
+        log.info(
+            f'{method_log_prefix} Exported harvested source {harvest_source_id} from graph {harvest_source_graph}. '
+            f'catalogs={exported_catalogs}, datasets={exported_datasets}, dataservices={exported_dataservices}'
+        )
+
+    def _get_harvested_entities_batch_size(self) -> int:
+        '''
+        Return batch size used to page harvested entity URIs during export.
+        '''
+        return int(config.get('ckanext.dcat.datasets_per_page', ConfigConstants.DATASETS_PER_PAGE))
+
+    def _get_harvested_export_context(self, rdf_store: RDFStoreQuery, rdf_xml_parser: RDFXmlParser) -> dict:
+        '''
+        Build shared context used while exporting one harvested source.
+        '''
+        export_context = {
+            'rdf_xml_parser': rdf_xml_parser,
+            'catalogs_with_european_theme_taxonomy': [],
+            'datasets_and_dataservices_with_european_themes': [],
+            'datasets_european_themes_dict': {},
+        }
+        if self._is_edp:
+            export_context['catalogs_with_european_theme_taxonomy'] = rdf_store.get_catalogs_with_europan_theme_taxonomy()
+            export_context['datasets_and_dataservices_with_european_themes'] = rdf_store.get_entities_with_europan_themes()
+            log.info(
+                f'{self._get_log_prefix(inspect.currentframe().f_code.co_name)} Loaded EDP export context: '
+                f'catalogs_with_eu_taxonomy={len(export_context["catalogs_with_european_theme_taxonomy"])}, '
+                f'entities_with_eu_themes={len(export_context["datasets_and_dataservices_with_european_themes"])}'
+            )
+        else:
+            log.info(f'{self._get_log_prefix(inspect.currentframe().f_code.co_name)} Loaded non-EDP export context')
+        return export_context
+
+    def _export_harvested_catalog_nodes(
+        self,
+        rdf_store: RDFStoreQuery,
+        rdf_xml_parser: RDFXmlParser,
+        root_catalog_uri: str,
+        harvest_source_graph: str,
+        method_log_prefix: str,
+        export_context: dict,
+    ) -> int:
+        '''
+        Export complete catalog nodes from one harvested graph.
+        '''
+        exported_catalogs = 0
+        catalog_uris = rdf_store.get_catalogs_uris_sorted_by_depth_level() or []
+        total_catalogs = len(catalog_uris)
+        log.info(f'{method_log_prefix} Found {total_catalogs} catalogs in graph {harvest_source_graph}')
+        skipped_catalogs = 0
+        for position, catalog_uri in enumerate(catalog_uris, start=1):
+            log.debug(f'{method_log_prefix} Exporting catalog {position}/{total_catalogs} from graph {harvest_source_graph}: {catalog_uri}')
+            catalog_graph = self._get_harvested_catalog_node_graph(rdf_store, catalog_uri)
+            if not self._has_harvested_graph_content(catalog_graph):
+                skipped_catalogs += 1
+                log.debug(f'{method_log_prefix} Catalog {catalog_uri} from graph {harvest_source_graph} is skipped because it has no triples')
+                continue
+
+            self._append_harvested_graph_to_parser(catalog_graph, rdf_xml_parser, root_catalog_uri, export_context)
+            exported_catalogs += 1
+        log.info(
+            f'{method_log_prefix} Finished catalogs export for graph {harvest_source_graph}. '
+            f'exported_catalogs={exported_catalogs}, skipped_catalogs={skipped_catalogs}'
+        )
+        return exported_catalogs
+
+    def _export_harvested_entities_by_type(
+        self,
+        rdf_store: RDFStoreQuery,
+        rdf_xml_parser: RDFXmlParser,
+        root_catalog_uri: str,
+        harvest_source_graph: str,
+        method_log_prefix: str,
+        export_context: dict,
+        dcat_class_name: DcatClassNameEnum,
+    ) -> int:
+        '''
+        Export complete dataset or dataservice nodes referenced from catalogs.
+        '''
+        exported_entities = 0
+        entity_batch_size = self._get_harvested_entities_batch_size()
+        entity_label = dcat_class_name.value.lower()
+        batch_number = 0
+        skipped_entities = 0
+        for entity_batch in rdf_store.iter_referenced_entities_uris_in_catalogs_of_a_graph(dcat_class_name, entity_batch_size):
+            batch_number += 1
+            log.info(
+                f'{method_log_prefix} Exporting {entity_label} batch {batch_number} '
+                f'with {len(entity_batch)} entities from graph {harvest_source_graph}'
+            )
+            for entity_position, entity_uri in enumerate(entity_batch, start=1):
+                log.debug(
+                    f'{method_log_prefix} Exporting {entity_label} {entity_position}/{len(entity_batch)} '
+                    f'of batch {batch_number} from graph {harvest_source_graph}: {entity_uri}'
+                )
+                entity_graph = self._get_harvested_entity_graph(rdf_store, entity_uri, dcat_class_name)
+                if not self._has_harvested_graph_content(entity_graph):
+                    skipped_entities += 1
+                    log.debug(f'{method_log_prefix} {entity_label.capitalize()} {entity_uri} from graph {harvest_source_graph} is skipped because it has no triples')
+                    continue
+
+                self._append_harvested_graph_to_parser(entity_graph, rdf_xml_parser, root_catalog_uri, export_context)
+                exported_entities += 1
+            log.info(
+                f'{method_log_prefix} Finished {entity_label} batch {batch_number} from graph {harvest_source_graph}. '
+                f'exported_{entity_label}s_so_far={exported_entities}'
+            )
+        log.info(
+            f'{method_log_prefix} Finished {entity_label} export for graph {harvest_source_graph}. '
+            f'batches={batch_number}, exported_{entity_label}s={exported_entities}, skipped_{entity_label}s={skipped_entities}'
+        )
+        return exported_entities
+
+    def _has_harvested_graph_content(self, graph: Graph) -> bool:
+        '''
+        Return whether one harvested export graph has triples to serialize.
+        '''
+        return bool(graph and len(graph) > 0)
+
+    def _append_harvested_graph_to_parser(
+        self,
+        graph: Graph,
+        rdf_xml_parser: RDFXmlParser,
+        root_catalog_uri: str,
+        export_context: dict,
+    ) -> None:
+        '''
+        Prepare one harvested graph block and append it to the RDF XML parser.
+        '''
+        self._prepare_harvested_export_graph(graph, export_context)
+        log.debug(
+            f'{self._get_log_prefix(inspect.currentframe().f_code.co_name)} Appending graph block to RDF XML parser. '
+            f'triples={len(graph)}, root_catalog_uri={root_catalog_uri}'
+        )
+        rdf_xml_parser.append_subcatalog(graph.serialize(format=SERIALIZED_FORMAT).encode('utf-8'), root_catalog_uri)
+
+    def _get_harvested_catalog_node_graph(self, rdf_store: RDFStoreQuery, catalog_uri: str) -> Graph:
+        '''
+        Build one complete catalog graph keeping only references to child entities.
+        '''
+        node_classes_to_exclude = [DCAT.Catalog, DCAT.CatalogRecord, DCAT.DataService, DCAT.Dataset, DCAT.Distribution]
+        return rdf_store.get_complete_node(catalog_uri, node_classes_to_exclude)
+
+    def _get_harvested_entity_graph(self, rdf_store: RDFStoreQuery, entity_uri: str, dcat_class_name: DcatClassNameEnum) -> Graph:
+        '''
+        Build one complete dataset or dataservice graph and its catalog record when present.
+        '''
+        node_classes_to_exclude = [DCAT.Catalog, DCAT.CatalogRecord, DCAT.DataService, DCAT.Dataset]
+        if dcat_class_name == DcatClassNameEnum.DATASERVICE:
+            node_classes_to_exclude.append(DCAT.Distribution)
+
+        entity_graph = rdf_store.get_complete_node(entity_uri, node_classes_to_exclude)
+        record_graph = rdf_store.get_complete_node(dge_harvest_build_catalog_record_uriref(entity_uri), None)
+        if record_graph and len(record_graph) > 0:
+            entity_graph += record_graph
+            log.debug(
+                f'{self._get_log_prefix(inspect.currentframe().f_code.co_name)} Added catalog record to entity {entity_uri}. '
+                f'entity_triples={len(entity_graph)}'
+            )
+        return entity_graph
+
+    def _prepare_harvested_export_graph(
+        self,
+        graph: Graph,
+        export_context: dict,
+    ) -> None:
+        '''
+        Prepare one harvested graph block before writing it to XML files.
+        '''
+        rdf_xml_parser = export_context['rdf_xml_parser']
+        self._update_namespaces_used_in_graph(graph, rdf_xml_parser)
+
+        creators_and_publishers = {o for _, _, o in graph.triples((None, DCT.creator, None))}
+        creators_and_publishers = creators_and_publishers.union({o for _, _, o in graph.triples((None, DCT.publisher, None))})
+        for creator_or_publisher in creators_and_publishers:
+            if isinstance(creator_or_publisher, URIRef):
+                rdf_xml_parser.check_if_is_an_available_organization(str(creator_or_publisher))
+        log.debug(
+            f'{self._get_log_prefix(inspect.currentframe().f_code.co_name)} Prepared graph block. '
+            f'triples={len(graph)}, creators_publishers={len(creators_and_publishers)}'
+        )
+
+        if self._is_edp:
+            self.add_european_theme_taxomony_to_catalog_in_graph(graph, export_context['catalogs_with_european_theme_taxonomy'])
+            self.add_european_theme_to_dataset_in_graph(
+                graph,
+                export_context['datasets_and_dataservices_with_european_themes'],
+                export_context['datasets_european_themes_dict'],
+            )
 
     def _update_namespaces_used_in_graph(self,page_graph, rdf_xml_parser):
         namespaces_to_bind = {}
         namespaces = []
+
+        def _register_namespace_if_needed(term):
+            if not isinstance(term, URIRef):
+                return
+            namespace_value = str(term)
+            if namespace_value in namespaces:
+                return
+            namespace_uri, _ = rdf_xml_parser.parse_namespace_and_element(namespace_value)
+            if namespace_uri not in namespaces:
+                namespaces.append(namespace_uri)
+                _prefix, _namespace_uri = rdf_xml_parser.add_namespace(None, namespace_uri)
+                namespaces_to_bind[_prefix] = Namespace(namespace_uri)
+
         for prefix, namespace_uri in page_graph.namespaces():
             _prefix, _namespace_uri = rdf_xml_parser.add_namespace(prefix, namespace_uri)
             namespaces.append(namespace_uri)
             if prefix != _prefix:
                 namespaces_to_bind[_prefix] = Namespace(namespace_uri)
             
-        for _, p, o in page_graph.triples((None, RDF.type, None)):
-            if isinstance(o, URIRef) and str(o) not in namespaces:
-                namespace_uri, _ = rdf_xml_parser.parse_namespace_and_element(str(o))
-                if namespace_uri not in namespaces:
-                    namespaces.append(namespace_uri)
-                    _prefix, _namespace_uri = rdf_xml_parser.add_namespace(None, namespace_uri)
-                    namespaces_to_bind[_prefix] = Namespace(namespace_uri)
+        for _, p, o in page_graph.triples((None, None, None)):
+            _register_namespace_if_needed(p)
+            if p == RDF.type:
+                _register_namespace_if_needed(o)
 
         for prefix, namespace_uri  in namespaces_to_bind.items():
             page_graph.bind(prefix, namespace_uri)
